@@ -75,25 +75,42 @@ The stub service (`services/device-service.ts`) exports these async functions, m
 
 ## Getting Started
 
+This app uses a **development build** (`expo-dev-client`), not Expo Go. A native build is required because the app will use BLE and other native modules not available in the Expo Go sandbox.
+
+### Prerequisites
+
+- Xcode (for iOS) and/or Android Studio (for Android)
+- Yarn
+
+### Setup
+
 1. Install dependencies
 
    ```bash
    yarn install
    ```
 
-2. Start the app
+2. Build and run on iOS Simulator
+
+   ```bash
+   yarn run:ios
+   ```
+
+   Or for Android:
+
+   ```bash
+   yarn run:android
+   ```
+
+   This compiles the native project and launches the dev client. Subsequent launches only need the dev server:
 
    ```bash
    yarn start
    ```
 
-3. Open in iOS Simulator (press `i`) or scan the QR code with Expo Go
-
-Other useful commands:
+### Other commands
 
 ```bash
-yarn ios       # Start and open in iOS Simulator
-yarn android   # Start and open in Android emulator
 yarn lint      # Run ESLint
 ```
 

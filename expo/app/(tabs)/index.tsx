@@ -106,7 +106,7 @@ export default function SlotsScreen() {
       <Pressable
         style={({ pressed }) => [
           styles.fab,
-          { backgroundColor: tint, opacity: pressed ? 0.8 : 1, bottom: insets.bottom + 80 },
+          { backgroundColor: tint, opacity: pressed ? 0.8 : 1, bottom: 16 },
         ]}
         onPress={() => router.push('/record-modal')}
       >
