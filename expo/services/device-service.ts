@@ -1,106 +1,119 @@
-// Stub BLE device service — returns mock data matching the ESP32 JSON API.
-// Swap this out for real BLE communication later.
+import { bleManager } from './ble-manager';
 
 export interface Slot {
   slot: number;
   name: string;
   protocol: string;
   pulseCount: number;
-  frequency: number;
 }
 
 export interface DeviceStatus {
   state: string;
   batteryVoltage: number;
   savedSignals: number;
-  firmwareVersion: string;
 }
 
 export interface RecordingResult {
   pulseCount: number;
   protocol: string;
-  frequency: number;
 }
 
-let connected = false;
+const COMMAND_TIMEOUT_MS = 5000;
 
-const mockSlots: Map<number, Slot> = new Map([
-  [1, { slot: 1, name: 'Garage Main', protocol: 'OOK', pulseCount: 128, frequency: 433.92 }],
-  [3, { slot: 3, name: 'Side Gate', protocol: 'OOK', pulseCount: 96, frequency: 433.92 }],
-]);
+function sendAndAwait(
+  command: Record<string, unknown>,
+  matchAction: string,
+): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      unsub();
+      reject(new Error(`Command "${matchAction}" timed out`));
+    }, COMMAND_TIMEOUT_MS);
+
+    const unsub = bleManager.onResponse((json) => {
+      if (json.action === matchAction) {
+        clearTimeout(timeout);
+        unsub();
+        if (json.status === 'error') {
+          reject(new Error((json.message as string) ?? 'Device returned error'));
+        } else {
+          resolve(json);
+        }
+      }
+    });
+
+    bleManager.sendCommand(command).catch((err) => {
+      clearTimeout(timeout);
+      unsub();
+      reject(err);
+    });
+  });
+}
+
+export async function connect(): Promise<void> {
+  await bleManager.connect();
+}
+
+export async function disconnect(): Promise<void> {
+  await bleManager.disconnect();
+}
+
+export function isConnected(): boolean {
+  return bleManager.state === 'connected';
+}
+
+export function onConnectionChange(listener: (state: string) => void): () => void {
+  return bleManager.onConnectionChange(listener);
+}
 
 export async function getSlots(): Promise<Slot[]> {
-  await delay(300);
-  return Array.from(mockSlots.values());
+  const resp = await sendAndAwait({ action: 'get_slots' }, 'get_slots');
+  const raw = resp.slots as Array<Record<string, unknown>> | undefined;
+  if (!raw) return [];
+  return raw.map((s) => ({
+    slot: s.slot as number,
+    name: s.name as string,
+    protocol: (s.protocol as string) ?? 'unknown',
+    pulseCount: (s.pulse_count as number) ?? 0,
+  }));
 }
 
 export async function playSlot(slot: number): Promise<{ success: boolean }> {
-  await delay(500);
-  if (!mockSlots.has(slot)) {
-    return { success: false };
-  }
+  await sendAndAwait({ action: 'play', slot }, 'play');
   return { success: true };
 }
 
 export async function startRecording(): Promise<void> {
-  await delay(200);
+  await sendAndAwait({ action: 'record' }, 'record');
 }
 
 export async function stopRecording(): Promise<RecordingResult> {
-  await delay(1500);
+  const resp = await sendAndAwait({ action: 'stop' }, 'stop');
   return {
-    pulseCount: 64 + Math.floor(Math.random() * 128),
-    protocol: 'OOK',
-    frequency: 433.92,
+    pulseCount: (resp.pulse_count as number) ?? 0,
+    protocol: (resp.protocol as string) ?? 'unknown',
   };
 }
 
 export async function saveSignal(
   slot: number,
   name: string,
-  recording: RecordingResult
+  _recording: RecordingResult,
 ): Promise<{ success: boolean }> {
-  await delay(400);
-  mockSlots.set(slot, {
-    slot,
-    name,
-    protocol: recording.protocol,
-    pulseCount: recording.pulseCount,
-    frequency: recording.frequency,
-  });
+  await sendAndAwait({ action: 'save', slot, name }, 'save');
   return { success: true };
 }
 
 export async function deleteSlot(slot: number): Promise<{ success: boolean }> {
-  await delay(300);
-  mockSlots.delete(slot);
+  await sendAndAwait({ action: 'delete', slot }, 'delete');
   return { success: true };
 }
 
 export async function getStatus(): Promise<DeviceStatus> {
-  await delay(200);
+  const resp = await sendAndAwait({ action: 'status' }, 'status');
   return {
-    state: connected ? 'idle' : 'disconnected',
-    batteryVoltage: 3.72,
-    savedSignals: mockSlots.size,
-    firmwareVersion: '0.1.0',
+    state: (resp.state as string) ?? 'unknown',
+    batteryVoltage: (resp.battery as number) ?? 0,
+    savedSignals: (resp.signals as number) ?? 0,
   };
-}
-
-export async function connect(): Promise<void> {
-  await delay(800);
-  connected = true;
-}
-
-export async function disconnect(): Promise<void> {
-  await delay(300);
-  connected = false;
-}
-
-export function isConnected(): boolean {
-  return connected;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }

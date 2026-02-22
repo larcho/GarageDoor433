@@ -12,7 +12,8 @@
       "bundleIdentifier": "com.larcho.garagedoor433",
       "supportsTablet": false,
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSBluetoothAlwaysUsageDescription": "This app uses Bluetooth to communicate with the GarageDoor433 device."
       }
     },
     "android": {
@@ -37,6 +38,13 @@
           "dark": {
             "backgroundColor": "#000000"
           }
+        }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "neverForLocation": true
         }
       ]
     ],

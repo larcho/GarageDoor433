@@ -4,9 +4,9 @@ React Native (Expo) companion app for the GarageDoor433 OOK signal recorder & re
 
 ## Current Status
 
-**UI: Complete** — All screens built with mock data, ready for BLE integration.
+**UI: Complete** — All screens built and wired to the device.
 
-**BLE: Stub** — A mock device service (`services/device-service.ts`) returns realistic data matching the ESP32 JSON API. Swap it for real BLE when ready.
+**BLE: Integrated** — Real BLE communication via `react-native-ble-plx`. Connects to the GarageDoor433 device over Nordic UART Service (NUS) and speaks JSON.
 
 ## Screens
 
@@ -19,14 +19,14 @@ React Native (Expo) companion app for the GarageDoor433 OOK signal recorder & re
 
 ### Settings Tab
 - Connection section with status indicator and connect/disconnect toggle
-- Device info: state, battery voltage, saved signal count, firmware version
+- Device info: state, battery voltage, saved signal count
 - iOS settings-style grouped list layout
 
 ### Record Modal
 Step-based flow:
 1. **Idle** — Tap the record button to start capturing
 2. **Recording** — Spinner while waiting for signal capture
-3. **Captured** — Shows pulse count, protocol, frequency; enter a name and pick a slot (1-5)
+3. **Captured** — Shows pulse count and protocol; enter a name and pick a slot (1-5)
 4. **Save** — Returns to Slots tab, which auto-refreshes via `useFocusEffect`
 
 ## Project Structure
@@ -54,22 +54,23 @@ expo/
 │   ├── use-color-scheme.web.ts# Web color scheme hook (SSR-safe)
 │   └── use-theme-color.ts     # Resolve themed color values
 └── services/
-    └── device-service.ts      # Stub BLE service (mock data)
+    ├── ble-manager.ts         # Low-level BLE singleton (scan, connect, NUS read/write)
+    └── device-service.ts      # High-level device API (commands, type mapping)
 ```
 
 ## Device Service API
 
-The stub service (`services/device-service.ts`) exports these async functions, matching the ESP32 BLE JSON API:
+The device service (`services/device-service.ts`) exports these async functions, communicating with the ESP32 over BLE:
 
 | Function | Description |
 |---|---|
 | `getSlots()` | List all saved signal slots |
 | `playSlot(slot)` | Replay a saved signal |
 | `startRecording()` | Begin OOK signal capture |
-| `stopRecording()` | Stop capture, returns pulse count/protocol/frequency |
+| `stopRecording()` | Stop capture, returns pulse count/protocol |
 | `saveSignal(slot, name, recording)` | Save a captured signal to a slot |
 | `deleteSlot(slot)` | Delete a saved signal |
-| `getStatus()` | Device state, battery, signal count, firmware version |
+| `getStatus()` | Device state, battery voltage, saved signal count |
 | `connect()` / `disconnect()` | BLE connection management |
 | `isConnected()` | Check connection state (synchronous) |
 
@@ -116,7 +117,7 @@ yarn lint      # Run ESLint
 
 ## Next Steps
 
-- [ ] Implement real BLE service using `react-native-ble-plx` (replace `device-service.ts`)
+- [x] Implement real BLE service using `react-native-ble-plx` (replace `device-service.ts`)
 - [ ] Add slot deletion (long-press or swipe)
 - [ ] Haptic feedback on signal replay
 - [ ] Signal strength / RSSI display during recording

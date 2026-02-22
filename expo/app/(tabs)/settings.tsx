@@ -114,8 +114,7 @@ export default function SettingsScreen() {
             <>
               <StatusRow label="State" value={status.state} cardBg={cardBg} colorScheme={colorScheme} />
               <StatusRow label="Battery" value={`${status.batteryVoltage.toFixed(2)} V`} cardBg={cardBg} colorScheme={colorScheme} />
-              <StatusRow label="Saved Signals" value={String(status.savedSignals)} cardBg={cardBg} colorScheme={colorScheme} />
-              <StatusRow label="Firmware" value={status.firmwareVersion} cardBg={cardBg} colorScheme={colorScheme} last />
+              <StatusRow label="Saved Signals" value={String(status.savedSignals)} cardBg={cardBg} colorScheme={colorScheme} last />
             </>
           ) : (
             <View style={styles.row}>

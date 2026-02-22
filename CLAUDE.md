@@ -96,7 +96,7 @@ Uses Expo Router (file-based routing). Tab screens live in `expo/app/(tabs)/`. M
 - Themed components: `ThemedText`, `ThemedView` (auto light/dark mode)
 - Icons: `IconSymbol` — SF Symbols on iOS, Material Icons on Android/web. New icons need a mapping added in `expo/components/ui/icon-symbol.tsx`
 - Colors defined in `expo/constants/theme.ts`
-- BLE service is stubbed in `expo/services/device-service.ts` — replace with real BLE later
+- BLE: `react-native-ble-plx` in `expo/services/ble-manager.ts` (low-level) and `expo/services/device-service.ts` (high-level API). After adding/updating native dependencies, rebuild with `yarn run:ios`
 
 ### Type checking
 

@@ -40,6 +40,8 @@ export default function RecordModal() {
     setStep('recording');
     try {
       await startRecording();
+      // Device records for up to 5s; send stop after a delay to retrieve the capture
+      await new Promise((r) => setTimeout(r, 5000));
       const captured = await stopRecording();
       setResult(captured);
       setStep('captured');
@@ -110,7 +112,6 @@ export default function RecordModal() {
           <View style={[styles.resultCard, { backgroundColor: cardBg }]}>
             <ResultRow label="Pulses" value={String(result.pulseCount)} />
             <ResultRow label="Protocol" value={result.protocol} />
-            <ResultRow label="Frequency" value={`${result.frequency} MHz`} />
           </View>
 
           <ThemedText style={styles.label}>Signal Name</ThemedText>
