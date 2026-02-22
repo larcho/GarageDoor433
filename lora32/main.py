@@ -7,6 +7,7 @@ button input, and LED status.
 """
 
 from machine import Pin, ADC
+import json
 import time
 import lora32
 
@@ -96,10 +97,135 @@ class App:
 
     def _handle_command(self, cmd):
         """BLE command callback - queue for main loop processing."""
-        self._pending_cmd = cmd.upper().strip()
+        self._pending_cmd = cmd.strip()
 
     def _process_command(self, cmd):
-        """Process a BLE text command."""
+        """Route incoming BLE data: try JSON first, fall back to legacy text."""
+        # Try JSON parse first
+        try:
+            req = json.loads(cmd)
+            if isinstance(req, dict) and "action" in req:
+                self._process_request(req)
+                return
+        except (ValueError, KeyError):
+            pass
+
+        # Legacy text command fallback
+        self._process_legacy_command(cmd.upper())
+
+    def _process_request(self, req):
+        """Process a JSON API request and send a JSON response."""
+        action = req.get("action", "")
+
+        if action == "record":
+            if self.state == STATE_IDLE or self.state == STATE_CAPTURED:
+                self.state = STATE_RECORDING
+                self.recorder.start_recording()
+                self.led.value(1)
+                self.ble.send_json({"status": "ok", "action": "record"})
+            else:
+                self.ble.send_json({"status": "error", "action": "record", "message": "Busy"})
+
+        elif action == "stop":
+            if self.state == STATE_RECORDING:
+                self.recorder.stop_recording()
+                if self.recorder.has_signal():
+                    self.state = STATE_CAPTURED
+                    proto = self.recorder.detect_protocol()
+                    self.display.screen_captured(self.recorder.pulse_count, proto)
+                    self.ble.send_json({
+                        "status": "ok", "action": "stop",
+                        "pulse_count": self.recorder.pulse_count, "protocol": proto,
+                    })
+                else:
+                    self.state = STATE_IDLE
+                    self.display.screen_error("No signal detected")
+                    self.ble.send_json({
+                        "status": "error", "action": "stop",
+                        "message": "No signal detected",
+                    })
+                self.led.value(0)
+            else:
+                self.ble.send_json({"status": "error", "action": "stop", "message": "Not recording"})
+
+        elif action == "play":
+            slot = req.get("slot")
+            if slot is None:
+                self.ble.send_json({"status": "error", "action": "play", "message": "Missing slot"})
+                return
+
+            result = self.recorder.load_signal(slot)
+            if result is None:
+                self.ble.send_json({"status": "error", "action": "play", "message": "Slot empty"})
+                self.display.screen_error("Slot {} empty".format(slot))
+                return
+
+            name, pulses = result
+            self.state = STATE_REPLAYING
+            self.last_slot = slot
+            self.ble.send_json({"status": "ok", "action": "play", "slot": slot})
+            self.led.value(1)
+
+            def progress(current, total):
+                self.display.screen_replaying(slot, current, total)
+
+            self.recorder.replay(pulses, progress_cb=progress)
+            self.led.value(0)
+            self.state = STATE_IDLE
+
+        elif action == "save":
+            slot = req.get("slot")
+            name = req.get("name", "signal")
+            if slot is None:
+                self.ble.send_json({"status": "error", "action": "save", "message": "Missing slot"})
+                return
+
+            if not self.recorder.has_signal():
+                self.ble.send_json({"status": "error", "action": "save", "message": "No signal to save"})
+                return
+
+            try:
+                if self.recorder.save_signal(slot, name):
+                    self.last_slot = slot
+                    self.state = STATE_IDLE
+                    self.ble.send_json({"status": "ok", "action": "save", "slot": slot, "name": name})
+                else:
+                    self.ble.send_json({"status": "error", "action": "save", "message": "Save failed (slot 1-5)"})
+            except Exception as e:
+                self.state = STATE_IDLE
+                self.ble.send_json({"status": "error", "action": "save", "message": str(e)})
+
+        elif action == "delete":
+            slot = req.get("slot")
+            if slot is None:
+                self.ble.send_json({"status": "error", "action": "delete", "message": "Missing slot"})
+                return
+            if self.recorder.delete_signal(slot):
+                self.ble.send_json({"status": "ok", "action": "delete", "slot": slot})
+            else:
+                self.ble.send_json({"status": "error", "action": "delete", "message": "Slot not found"})
+
+        elif action == "get_slots":
+            slots = self.recorder.get_all_slots()
+            self.ble.send_json({"status": "ok", "action": "get_slots", "slots": slots})
+
+        elif action == "status":
+            states = {STATE_IDLE: "idle", STATE_RECORDING: "recording",
+                      STATE_CAPTURED: "captured", STATE_REPLAYING: "replaying"}
+            signals = self.recorder.list_signals()
+            self.ble.send_json({
+                "status": "ok", "action": "status",
+                "state": states.get(self.state, "unknown"),
+                "ble": True,
+                "battery": round(self._read_battery(), 2),
+                "signals": len(signals),
+            })
+
+        else:
+            self.ble.send_json({"status": "error", "action": action, "message": "Unknown action"})
+
+    def _process_legacy_command(self, cmd):
+        """Process a legacy ASCII text command (backward compat for nRF Connect)."""
         parts = cmd.split()
         verb = parts[0] if parts else ""
 

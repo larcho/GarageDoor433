@@ -1,9 +1,10 @@
 """
 BLE GATT Server - Nordic UART Service (NUS)
-Provides text-based command interface for iOS app control.
+Provides JSON API and text command interface for iOS app control.
 """
 
 import bluetooth
+import json
 import struct
 import time
 
@@ -135,8 +136,8 @@ class BLEService:
             return False
         try:
             data = text.encode()
-            # Split into chunks if needed (BLE MTU limit)
-            chunk_size = 20
+            # Split into chunks if needed (safe default below typical negotiated MTU)
+            chunk_size = 128
             for i in range(0, len(data), chunk_size):
                 chunk = data[i:i + chunk_size]
                 self._ble.gatts_notify(self._conn_handle, self._tx_handle, chunk)
@@ -149,6 +150,10 @@ class BLEService:
     def send_line(self, text):
         """Send text with newline."""
         return self.send(text + "\n")
+
+    def send_json(self, data):
+        """Serialize a dict to JSON and send as a newline-terminated notification."""
+        return self.send(json.dumps(data) + "\n")
 
     def disconnect(self):
         """Disconnect current client."""

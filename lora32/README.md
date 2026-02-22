@@ -35,9 +35,50 @@ Saved signals live at `/signals/slot_N.json` (N = 1–5). Each file contains:
 {"name": "GARAGE", "pulses": [[380, 840], [890, 330], ...], "protocol": "unknown", "pulse_count": 29}
 ```
 
-## BLE Commands
+## BLE API
 
-Connect to `GarageDoor433` with any BLE serial/UART app (e.g. nRF Connect, Serial Bluetooth Terminal). Send commands as text:
+Connect to `GarageDoor433` via the Nordic UART Service (NUS). The primary interface is JSON — write a JSON object to the RX characteristic and receive a JSON response via TX notification.
+
+### JSON Requests (write to RX)
+
+```json
+{"action": "record"}
+{"action": "stop"}
+{"action": "play", "slot": 1}
+{"action": "save", "slot": 1, "name": "Garage"}
+{"action": "delete", "slot": 1}
+{"action": "get_slots"}
+{"action": "status"}
+```
+
+### JSON Responses (notified via TX)
+
+```json
+{"status": "ok", "action": "record"}
+{"status": "ok", "action": "stop", "pulse_count": 29, "protocol": "PT2262"}
+{"status": "ok", "action": "play", "slot": 1}
+{"status": "ok", "action": "save", "slot": 1, "name": "Garage"}
+{"status": "ok", "action": "delete", "slot": 1}
+{"status": "ok", "action": "get_slots", "slots": [
+  {"slot": 1, "name": "Garage", "pulse_count": 29, "protocol": "PT2262"}
+]}
+{"status": "ok", "action": "status", "state": "idle", "ble": true, "battery": 4.12, "signals": 2}
+{"status": "error", "action": "play", "message": "Slot empty"}
+```
+
+### Typical workflow
+
+```json
+{"action": "record"}       // press your remote near the board
+{"action": "stop"}         // or wait for 5s auto-timeout
+{"action": "save", "slot": 1, "name": "Garage"}
+{"action": "play", "slot": 1}   // replay — should open the door
+{"action": "get_slots"}         // list all saved signals
+```
+
+### Legacy text commands
+
+Plain-text commands are still supported for debugging with nRF Connect or Serial Bluetooth Terminal:
 
 | Command | Description |
 |---|---|
@@ -48,15 +89,6 @@ Connect to `GarageDoor433` with any BLE serial/UART app (e.g. nRF Connect, Seria
 | `LIST` | List all saved signals |
 | `DELETE <slot>` | Delete a saved signal |
 | `STATUS` | Show device state, BLE status, battery voltage |
-
-### Typical workflow
-
-```
-RECORD          → press your remote near the board
-STOP            → (or wait for 5s auto-timeout)
-SAVE 1 GARAGE   → store to slot 1
-PLAY 1          → replay — should open the door
-```
 
 ## Setup
 

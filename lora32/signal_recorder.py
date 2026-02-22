@@ -339,7 +339,7 @@ class SignalRecorder:
             return False
 
     def list_signals(self):
-        """List all saved signals. Returns [(slot, name, pulse_count), ...]."""
+        """List all saved signals. Returns [(slot, name, pulse_count, protocol), ...]."""
         signals = []
         for slot in range(1, MAX_SLOTS + 1):
             path = "{}/slot_{}.json".format(SIGNALS_DIR, slot)
@@ -352,3 +352,15 @@ class SignalRecorder:
             except (OSError, ValueError):
                 pass
         return signals
+
+    def get_all_slots(self):
+        """Return all saved signals as a list of dicts for JSON API."""
+        slots = []
+        for slot, name, pulse_count, protocol in self.list_signals():
+            slots.append({
+                "slot": slot,
+                "name": name,
+                "pulse_count": pulse_count,
+                "protocol": protocol,
+            })
+        return slots
