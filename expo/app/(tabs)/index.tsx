@@ -1,17 +1,22 @@
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Alert, Pressable, StyleSheet, View } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
+import {
+  Host,
+  List,
+  Section,
+  HStack,
+  VStack,
+  Text,
+  Button,
+  Image,
+  Spacer,
+  CircularProgress,
+  ContentUnavailableView,
+} from '@expo/ui/swift-ui';
+import { padding } from '@expo/ui/swift-ui/modifiers';
+
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
@@ -23,7 +28,8 @@ export default function SlotsScreen() {
   const [playingSlot, setPlayingSlot] = useState<number | null>(null);
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
-  const insets = useSafeAreaInsets();
+
+  const tint = Colors[colorScheme].tint;
 
   useFocusEffect(
     useCallback(() => {
@@ -55,64 +61,66 @@ export default function SlotsScreen() {
     }
   };
 
-  const tint = Colors[colorScheme].tint;
-  const cardBg = colorScheme === 'dark' ? '#1e2023' : '#f2f2f7';
-
   return (
-    <ThemedView style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <ThemedText type="title">Slots</ThemedText>
-      </View>
+    <View style={styles.container}>
+      <Host style={{ flex: 1 }} colorScheme={colorScheme}>
+        <VStack modifiers={[padding({ top: 16, leading: 20, trailing: 20 })]}>
+          <Text size={34} weight="bold">
+            Slots
+          </Text>
+        </VStack>
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color={tint} />
-        </View>
-      ) : slots.length === 0 ? (
-        <View style={styles.center}>
-          <ThemedText style={styles.emptyText}>No saved signals</ThemedText>
-          <ThemedText style={styles.emptySubtext}>
-            Tap + to record a new signal
-          </ThemedText>
-        </View>
-      ) : (
-        <ScrollView contentContainerStyle={styles.grid}>
-          {slots.map((slot) => (
-            <Pressable
-              key={slot.slot}
-              style={({ pressed }) => [
-                styles.card,
-                { backgroundColor: cardBg, opacity: pressed ? 0.7 : 1 },
-              ]}
-              onPress={() => handlePlay(slot)}
-              disabled={playingSlot !== null}
-            >
-              {playingSlot === slot.slot ? (
-                <ActivityIndicator size="large" color={tint} />
-              ) : (
-                <IconSymbol name="play.fill" size={40} color={tint} />
-              )}
-              <ThemedText type="defaultSemiBold" style={styles.slotName}>
-                {slot.name}
-              </ThemedText>
-              <ThemedText style={styles.slotDetail}>
-                Slot {slot.slot} · {slot.protocol} · {slot.pulseCount} pulses
-              </ThemedText>
-            </Pressable>
-          ))}
-        </ScrollView>
-      )}
+        {loading ? (
+          <VStack alignment="center" modifiers={[padding({ top: 80 })]}>
+            <CircularProgress />
+          </VStack>
+        ) : slots.length === 0 ? (
+          <ContentUnavailableView
+            title="No Saved Signals"
+            systemImage="antenna.radiowaves.left.and.right"
+            description="Tap + to record a new signal"
+          />
+        ) : (
+          <List listStyle="insetGrouped">
+            <Section>
+              {slots.map((slot) => (
+                <Button
+                  key={slot.slot}
+                  onPress={() => handlePlay(slot)}
+                  disabled={playingSlot !== null}
+                  variant="plain"
+                >
+                  <HStack spacing={12}>
+                    {playingSlot === slot.slot ? (
+                      <CircularProgress />
+                    ) : (
+                      <Image systemName="play.fill" size={22} color={tint} />
+                    )}
+                    <VStack alignment="leading" spacing={2}>
+                      <Text weight="semibold">{slot.name}</Text>
+                      <Text size={13} color="secondary">
+                        {`Slot ${slot.slot} · ${slot.protocol} · ${slot.pulseCount} pulses`}
+                      </Text>
+                    </VStack>
+                    <Spacer />
+                  </HStack>
+                </Button>
+              ))}
+            </Section>
+          </List>
+        )}
+      </Host>
 
       <Pressable
         style={({ pressed }) => [
           styles.fab,
-          { backgroundColor: tint, opacity: pressed ? 0.8 : 1, bottom: 16 },
+          { backgroundColor: tint, opacity: pressed ? 0.8 : 1 },
         ]}
         onPress={() => router.push('/record-modal')}
       >
         <IconSymbol name="plus" size={28} color="#fff" />
       </Pressable>
-    </ThemedView>
+    </View>
   );
 }
 
@@ -120,50 +128,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 12,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyText: {
-    fontSize: 18,
-    opacity: 0.6,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    opacity: 0.4,
-    marginTop: 4,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    padding: 12,
-    gap: 12,
-  },
-  card: {
-    width: '47%',
-    aspectRatio: 1,
-    borderRadius: 16,
-    padding: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  slotName: {
-    textAlign: 'center',
-  },
-  slotDetail: {
-    fontSize: 12,
-    opacity: 0.5,
-    textAlign: 'center',
-  },
   fab: {
     position: 'absolute',
     right: 20,
+    bottom: 16,
     width: 56,
     height: 56,
     borderRadius: 28,

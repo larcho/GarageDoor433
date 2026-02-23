@@ -1,18 +1,21 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert } from 'react-native';
 
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { IconSymbol } from '@/components/ui/icon-symbol';
-import { Colors } from '@/constants/theme';
+import {
+  Host,
+  VStack,
+  Text,
+  Button,
+  Form,
+  Section,
+  LabeledContent,
+  TextField,
+  Picker,
+  CircularProgress,
+} from '@expo/ui/swift-ui';
+import { padding } from '@expo/ui/swift-ui/modifiers';
+
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
   saveSignal,
@@ -23,24 +26,20 @@ import {
 
 type Step = 'idle' | 'recording' | 'captured' | 'saving';
 
+const SLOT_OPTIONS = ['1', '2', '3', '4', '5'];
+
 export default function RecordModal() {
   const [step, setStep] = useState<Step>('idle');
   const [result, setResult] = useState<RecordingResult | null>(null);
   const [name, setName] = useState('');
-  const [slotNumber, setSlotNumber] = useState(1);
+  const [slotIndex, setSlotIndex] = useState(0);
   const colorScheme = useColorScheme() ?? 'light';
   const router = useRouter();
-
-  const tint = Colors[colorScheme].tint;
-  const cardBg = colorScheme === 'dark' ? '#1e2023' : '#f2f2f7';
-  const inputBg = colorScheme === 'dark' ? '#2c2c2e' : '#fff';
-  const textColor = Colors[colorScheme].text;
 
   const handleStartRecording = async () => {
     setStep('recording');
     try {
       await startRecording();
-      // Device records for up to 5s; send stop after a delay to retrieve the capture
       await new Promise((r) => setTimeout(r, 5000));
       const captured = await stopRecording();
       setResult(captured);
@@ -60,6 +59,7 @@ export default function RecordModal() {
 
     setStep('saving');
     try {
+      const slotNumber = slotIndex + 1;
       const res = await saveSignal(slotNumber, name.trim(), result);
       if (res.success) {
         router.back();
@@ -74,195 +74,71 @@ export default function RecordModal() {
   };
 
   return (
-    <ThemedView style={styles.container}>
+    <Host style={{ flex: 1 }} colorScheme={colorScheme}>
       {step === 'idle' && (
-        <View style={styles.center}>
-          <ThemedText style={styles.instruction}>
+        <VStack alignment="center" spacing={24} modifiers={[padding({ top: 120 })]}>
+          <Text color="secondary" size={16}>
             Press the button below, then activate your remote within 5 seconds.
-          </ThemedText>
-          <Pressable
-            style={({ pressed }) => [
-              styles.bigButton,
-              { backgroundColor: '#ff3b30', opacity: pressed ? 0.8 : 1 },
-            ]}
+          </Text>
+          <Button
             onPress={handleStartRecording}
+            variant="borderedProminent"
+            controlSize="large"
+            color="#ff3b30"
+            systemImage="record.circle"
           >
-            <IconSymbol name="record.circle" size={48} color="#fff" />
-            <ThemedText style={styles.bigButtonText}>Start Recording</ThemedText>
-          </Pressable>
-        </View>
+            Start Recording
+          </Button>
+        </VStack>
       )}
 
       {step === 'recording' && (
-        <View style={styles.center}>
-          <ActivityIndicator size="large" color="#ff3b30" />
-          <ThemedText type="subtitle" style={styles.recordingText}>
+        <VStack alignment="center" spacing={20} modifiers={[padding({ top: 120 })]}>
+          <CircularProgress color="#ff3b30" />
+          <Text weight="bold" color="#ff3b30" size={20}>
             Recording...
-          </ThemedText>
-          <ThemedText style={styles.instruction}>
+          </Text>
+          <Text color="secondary" size={16}>
             Activate your remote now
-          </ThemedText>
-        </View>
+          </Text>
+        </VStack>
       )}
 
       {(step === 'captured' || step === 'saving') && result && (
-        <View style={styles.form}>
-          <ThemedText type="subtitle">Signal Captured</ThemedText>
+        <Form>
+          <Section title="Signal Captured">
+            <LabeledContent label="Pulses">
+              <Text>{String(result.pulseCount)}</Text>
+            </LabeledContent>
+            <LabeledContent label="Protocol">
+              <Text>{result.protocol}</Text>
+            </LabeledContent>
+          </Section>
 
-          <View style={[styles.resultCard, { backgroundColor: cardBg }]}>
-            <ResultRow label="Pulses" value={String(result.pulseCount)} />
-            <ResultRow label="Protocol" value={result.protocol} />
-          </View>
-
-          <ThemedText style={styles.label}>Signal Name</ThemedText>
-          <TextInput
-            style={[styles.input, { backgroundColor: inputBg, color: textColor }]}
-            placeholder="e.g. Garage Main"
-            placeholderTextColor={colorScheme === 'dark' ? '#666' : '#999'}
-            value={name}
-            onChangeText={setName}
-            autoFocus
-          />
-
-          <ThemedText style={styles.label}>Slot Number</ThemedText>
-          <View style={styles.slotPicker}>
-            {[1, 2, 3, 4, 5].map((n) => (
-              <Pressable
-                key={n}
-                style={[
-                  styles.slotChip,
-                  {
-                    backgroundColor: n === slotNumber ? tint : cardBg,
-                  },
-                ]}
-                onPress={() => setSlotNumber(n)}
-              >
-                <ThemedText
-                  style={[
-                    styles.slotChipText,
-                    { color: n === slotNumber ? '#fff' : textColor },
-                  ]}
-                >
-                  {n}
-                </ThemedText>
-              </Pressable>
-            ))}
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.saveButton,
-              { backgroundColor: tint, opacity: pressed ? 0.8 : 1 },
-            ]}
-            onPress={handleSave}
-            disabled={step === 'saving'}
-          >
-            {step === 'saving' ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <ThemedText style={styles.saveButtonText}>Save Signal</ThemedText>
-            )}
-          </Pressable>
-        </View>
+          <Section title="Save">
+            <TextField
+              placeholder="Signal Name"
+              onChangeText={setName}
+              defaultValue={name}
+            />
+            <Picker
+              label="Slot"
+              options={SLOT_OPTIONS}
+              selectedIndex={slotIndex}
+              variant="segmented"
+              onOptionSelected={(e) => setSlotIndex(e.nativeEvent.index)}
+            />
+            <Button
+              onPress={handleSave}
+              variant="borderedProminent"
+              controlSize="large"
+              disabled={step === 'saving'}
+            >
+              {step === 'saving' ? 'Saving…' : 'Save Signal'}
+            </Button>
+          </Section>
+        </Form>
       )}
-    </ThemedView>
+    </Host>
   );
 }
-
-function ResultRow({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.resultRow}>
-      <ThemedText style={styles.resultLabel}>{label}</ThemedText>
-      <ThemedText type="defaultSemiBold">{value}</ThemedText>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    padding: 20,
-  },
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 20,
-  },
-  instruction: {
-    fontSize: 16,
-    textAlign: 'center',
-    opacity: 0.6,
-    paddingHorizontal: 32,
-  },
-  bigButton: {
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  bigButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  recordingText: {
-    color: '#ff3b30',
-  },
-  form: {
-    flex: 1,
-    gap: 12,
-    paddingTop: 12,
-  },
-  resultCard: {
-    borderRadius: 12,
-    padding: 4,
-  },
-  resultRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  resultLabel: {
-    opacity: 0.6,
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  input: {
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 16,
-  },
-  slotPicker: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  slotChip: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  slotChipText: {
-    fontSize: 18,
-    fontWeight: '600',
-  },
-  saveButton: {
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-  },
-});
