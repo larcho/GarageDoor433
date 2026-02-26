@@ -12,9 +12,9 @@ import {
   LabeledContent,
   TextField,
   Picker,
-  CircularProgress,
+  ProgressView,
 } from '@expo/ui/swift-ui';
-import { padding } from '@expo/ui/swift-ui/modifiers';
+import { multilineTextAlignment, padding } from '@expo/ui/swift-ui/modifiers';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
@@ -76,10 +76,7 @@ export default function RecordModal() {
   return (
     <Host style={{ flex: 1 }} colorScheme={colorScheme}>
       {step === 'idle' && (
-        <VStack alignment="center" spacing={24} modifiers={[padding({ top: 120 })]}>
-          <Text color="secondary" size={16}>
-            Press the button below, then activate your remote within 5 seconds.
-          </Text>
+        <VStack alignment="center" spacing={24} modifiers={[padding({ all: 24 })]}>
           <Button
             onPress={handleStartRecording}
             variant="borderedProminent"
@@ -89,12 +86,15 @@ export default function RecordModal() {
           >
             Start Recording
           </Button>
+          <Text color="secondary" size={16} modifiers={[multilineTextAlignment('center')]}>
+            Press the button below, then activate your remote within 5 seconds.
+          </Text>
         </VStack>
       )}
 
       {step === 'recording' && (
-        <VStack alignment="center" spacing={20} modifiers={[padding({ top: 120 })]}>
-          <CircularProgress color="#ff3b30" />
+        <VStack alignment="center" spacing={20}>
+          <ProgressView />
           <Text weight="bold" color="#ff3b30" size={20}>
             Recording...
           </Text>

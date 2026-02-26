@@ -67,6 +67,7 @@ export function onConnectionChange(listener: (state: string) => void): () => voi
 }
 
 export async function getSlots(): Promise<Slot[]> {
+  if (!isConnected()) return [];
   const resp = await sendAndAwait({ action: 'get_slots' }, 'get_slots');
   const raw = resp.slots as Array<Record<string, unknown>> | undefined;
   if (!raw) return [];
@@ -109,7 +110,8 @@ export async function deleteSlot(slot: number): Promise<{ success: boolean }> {
   return { success: true };
 }
 
-export async function getStatus(): Promise<DeviceStatus> {
+export async function getStatus(): Promise<DeviceStatus | null> {
+  if (!isConnected()) return null;
   const resp = await sendAndAwait({ action: 'status' }, 'status');
   return {
     state: (resp.state as string) ?? 'unknown',
