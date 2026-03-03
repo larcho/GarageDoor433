@@ -9,8 +9,9 @@ import {
   LabeledContent,
   Text,
   Button,
-  CircularProgress,
+  ProgressView,
 } from '@expo/ui/swift-ui';
+import { disabled } from '@expo/ui/swift-ui/modifiers';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import {
@@ -69,10 +70,9 @@ export default function SettingsScreen() {
           </LabeledContent>
           <Button
             onPress={handleToggleConnection}
-            disabled={busy}
-          >
-            {busy ? 'Connecting…' : connected ? 'Disconnect' : 'Connect'}
-          </Button>
+            label={busy ? 'Connecting…' : connected ? 'Disconnect' : 'Connect'}
+            modifiers={[disabled(busy)]}
+          />
         </Section>
 
         <Section title="Device">
@@ -89,7 +89,7 @@ export default function SettingsScreen() {
               </LabeledContent>
             </>
           ) : (
-            <CircularProgress />
+            <ProgressView />
           )}
         </Section>
       </List>

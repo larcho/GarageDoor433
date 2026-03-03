@@ -16,7 +16,6 @@ export default function RootLayout() {
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="record-modal" options={{ presentation: 'modal', title: 'Record Signal' }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>
