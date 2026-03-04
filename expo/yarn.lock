@@ -1237,7 +1237,7 @@
   resolved "https://registry.yarnpkg.com/@expo/sudo-prompt/-/sudo-prompt-9.3.2.tgz#0fd2813402a42988e49145cab220e25bea74b308"
   integrity sha512-HHQigo3rQWKMDzYDLkubN5WQOYXJJE2eNqIQC2axC2iO3mHdwnIR7FgZVvHWtBwAdzBgAP0ECp8KqS8TiMKvgw==
 
-"@expo/ui@55.0.1":
+"@expo/ui@55.0.1", "@expo/ui@~55.0.1":
   version "55.0.1"
   resolved "https://registry.yarnpkg.com/@expo/ui/-/ui-55.0.1.tgz#625a7e8673294d2e3f40c84912b3cb34635eb534"
   integrity sha512-j9UFdW2OaM4+dmk5UYzgwtwioreWJlGQUhBxPUH2/5U4ROS2JPyJo0jtwgM6bfawyYQfobKvp0utVoRQJ3Ul1A==
@@ -3696,6 +3696,14 @@ expo-web-browser@~55.0.9:
   version "55.0.9"
   resolved "https://registry.yarnpkg.com/expo-web-browser/-/expo-web-browser-55.0.9.tgz#b00fbc0dcc08bc8d577bac305dd589002e6aa05d"
   integrity sha512-PvAVsG401QmZabtTsYh1cYcpPiqvBPs8oiOkSrp0jIXnneiM466HxmeNtvo+fNxqJ2nwOBz9qLPiWRO91VBfsQ==
+
+expo-widgets@^55.0.2:
+  version "55.0.2"
+  resolved "https://registry.yarnpkg.com/expo-widgets/-/expo-widgets-55.0.2.tgz#116ef826e19cc8f540b0f5ac9d61840ff187b196"
+  integrity sha512-srjlYT9HHj8O9WOExZ9oZvUS3u5/z7l+MDk6m5X/zcOL5ezGnVD3ilDCkh/4np8JJEnzftPsXcz5iy2EmCDYDg==
+  dependencies:
+    "@expo/plist" "^0.5.2"
+    "@expo/ui" "~55.0.1"
 
 expo@~55.0.4:
   version "55.0.4"

@@ -101,7 +101,8 @@ class App:
         raw = self._adc.read()
         # T3 board has 100k/100k voltage divider, so multiply by 2
         # ADC 12-bit (0-4095), 3.3V reference
-        return (raw / 4095.0) * 3.3 * 2
+        # 1.0528 calibration factor — ESP32 ADC reads ~5% low (verified against multimeter)
+        return (raw / 4095.0) * 3.3 * 2 * 1.0528
 
     def _handle_command(self, cmd):
         """BLE command callback - queue for main loop processing."""

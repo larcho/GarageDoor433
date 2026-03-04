@@ -47,7 +47,20 @@
       ],
       "expo-font",
       "expo-image",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-widgets",
+        {
+          "widgets": [
+            {
+              "name": "GarageDoorWidget",
+              "displayName": "Garage Door",
+              "description": "Control your garage door slots from the home screen.",
+              "supportedFamilies": ["systemMedium"]
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
