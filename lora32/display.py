@@ -177,6 +177,16 @@ class Display:
         self._center_text("Ready", ROW3)
         self.show()
 
+    def screen_recording_multi(self, captured=0, target=3):
+        """Multi-press averaging progress screen."""
+        self.clear()
+        self._draw_header("MULTI-RECORD")
+        self._center_text("{}/{}  captured".format(captured, target), ROW1)
+        self._center_text("Press remote!" if captured < target else "Processing...", ROW2)
+        self._draw_progress_bar(0, ROW3, self.width, 7,
+                                captured / target if target > 0 else 0)
+        self.show()
+
     def screen_pin(self, pin):
         """BLE pairing PIN screen — shown only for new/unknown devices."""
         self.clear()

@@ -74,18 +74,27 @@ Connect to `GarageDoor433` via the Nordic UART Service (NUS). The primary interf
 ### JSON Requests (write to RX)
 
 ```json
-{"action": "record"}
+{"action": "record_multi", "count": 3}   // preferred: multi-press averaging
+{"action": "record"}                      // single-press capture
 {"action": "stop"}
 {"action": "play", "slot": 1}
 {"action": "save", "slot": 1, "name": "Garage"}
 {"action": "delete", "slot": 1}
 {"action": "get_slots"}
+{"action": "get_signal", "slot": 1}
 {"action": "status"}
 ```
 
 ### JSON Responses (notified via TX)
 
 ```json
+// Multi-press: unsolicited progress events during capture
+{"action": "record_progress", "captured": 1, "target": 3}
+{"action": "record_progress", "captured": 2, "target": 3}
+
+// Multi-press: final result (also sent for single-press "stop")
+{"status": "ok", "action": "record_done", "pulse_count": 24, "protocol": "EV1527"}
+
 {"status": "ok", "action": "record"}
 {"status": "ok", "action": "stop", "pulse_count": 29, "protocol": "PT2262"}
 {"status": "ok", "action": "play", "slot": 1}
@@ -94,19 +103,24 @@ Connect to `GarageDoor433` via the Nordic UART Service (NUS). The primary interf
 {"status": "ok", "action": "get_slots", "slots": [
   {"slot": 1, "name": "Garage", "pulse_count": 29, "protocol": "PT2262"}
 ]}
-{"status": "ok", "action": "status", "state": "idle", "ble": true, "battery": 4.12, "signals": 2}
+{"status": "ok", "action": "status", "state": "idle", "ble": true, "battery": 3.94, "signals": 2}
 {"status": "error", "action": "play", "message": "Slot empty"}
 ```
 
 ### Typical workflow
 
 ```json
-{"action": "record"}       // press your remote near the board
-{"action": "stop"}         // or wait for 5s auto-timeout
+// Recommended: press remote 3 times for an averaged, noise-reduced signal
+{"action": "record_multi", "count": 3}
+// → wait for record_progress events, then record_done
 {"action": "save", "slot": 1, "name": "Garage"}
-{"action": "play", "slot": 1}   // replay — should open the door
-{"action": "get_slots"}         // list all saved signals
+{"action": "play", "slot": 1}    // replay — should open the door
+{"action": "get_slots"}          // list all saved signals
 ```
+
+### Multi-press averaging
+
+`record_multi` captures N separate button presses, extracts a single clean code frame from each one, and averages the pulse timings across all frames. This reduces noise and jitter compared to a single capture, and is especially useful for fixed-code remotes (PT2262, EV1527). Timeout: 30 seconds.
 
 ### Legacy text commands
 

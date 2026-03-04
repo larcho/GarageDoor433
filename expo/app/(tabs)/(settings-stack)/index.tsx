@@ -2,20 +2,40 @@ import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
 import { useFocusEffect } from 'expo-router';
-import {
-  Button,
-  Host,
-  LabeledContent,
-  List,
-  ProgressView,
-  Section,
-  Text,
-} from '@expo/ui/swift-ui';
+import { Button, Host, LabeledContent, List, ProgressView, Section, Text } from '@expo/ui/swift-ui';
 import { disabled } from '@expo/ui/swift-ui/modifiers';
 
 import { useBleState } from '@/contexts/ble-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { connect, type DeviceStatus,disconnect, getStatus } from '@/services/device-service';
+import { connect, type DeviceStatus, disconnect, getStatus } from '@/services/device-service';
+
+// LiPo 3.7V discharge curve — voltage (V) to percent lookup table
+const LIPO_CURVE: [number, number][] = [
+  [4.2, 100],
+  [4.1, 90],
+  [4.0, 80],
+  [3.9, 70],
+  [3.8, 60],
+  [3.7, 50],
+  [3.6, 38],
+  [3.5, 26],
+  [3.4, 15],
+  [3.3, 7],
+  [3.0, 0],
+];
+
+function voltageToPercent(v: number): number {
+  if (v >= LIPO_CURVE[0][0]) return 100;
+  if (v <= LIPO_CURVE[LIPO_CURVE.length - 1][0]) return 0;
+  for (let i = 0; i < LIPO_CURVE.length - 1; i++) {
+    const [v1, p1] = LIPO_CURVE[i];
+    const [v2, p2] = LIPO_CURVE[i + 1];
+    if (v <= v1 && v >= v2) {
+      return Math.round(p1 + ((v - v1) / (v2 - v1)) * (p2 - p1));
+    }
+  }
+  return 0;
+}
 
 export default function SettingsScreen() {
   const [status, setStatus] = useState<DeviceStatus | null>(null);
@@ -87,11 +107,7 @@ export default function SettingsScreen() {
       <List listStyle="insetGrouped">
         <Section title="Connection">
           <LabeledContent label="Status">
-            {isSearching ? (
-              <ProgressView />
-            ) : (
-              <Text color={statusColor}>{statusText}</Text>
-            )}
+            {isSearching ? <ProgressView /> : <Text color={statusColor}>{statusText}</Text>}
           </LabeledContent>
           <Button
             onPress={handleToggleConnection}
@@ -108,7 +124,7 @@ export default function SettingsScreen() {
                   <Text>{status.state}</Text>
                 </LabeledContent>
                 <LabeledContent label="Battery">
-                  <Text>{`${status.batteryVoltage.toFixed(2)} V`}</Text>
+                  <Text>{`${voltageToPercent(status.batteryVoltage)}% (${status.batteryVoltage.toFixed(2)} V)`}</Text>
                 </LabeledContent>
                 <LabeledContent label="Saved Signals">
                   <Text>{String(status.savedSignals)}</Text>

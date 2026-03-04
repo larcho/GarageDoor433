@@ -8,7 +8,7 @@ React Native (Expo) companion app for the GarageDoor433 OOK signal recorder & re
 - **BLE PIN pairing** — First connection triggers a standard iOS/Android pairing dialog. Enter the 6-digit PIN shown on the device OLED. Subsequent connections are silent (bonded).
 - **Slots tab** — List of saved signal slots with one-tap replay
 - **Record sheet** — Step-based signal capture flow (record → captured → save)
-- **Settings tab** — Connection status, device info, manual connect/disconnect
+- **Settings tab** — Connection status, device state, battery percentage + voltage, saved signal count, manual connect/disconnect
 
 ## Screens
 
@@ -24,16 +24,17 @@ React Native (Expo) companion app for the GarageDoor433 OOK signal recorder & re
 
 - **Status row** — shows `Connected` (green), `Disconnected` (red), `Searching…` or `Pairing…` (orange with spinner) based on real-time BLE state
 - **Connect / Disconnect** button — disabled while auto-connect is running to prevent races
-- **Device section** — state, battery voltage, saved signal count (only shown when connected)
+- **Device section** — state, battery percentage + voltage (e.g. "72% (3.94 V)"), saved signal count (only shown when connected)
 - Connection error alerts include a pairing hint for first-time users
 
 ### Record Sheet (bottom sheet)
 
-Step-based flow:
+Step-based multi-press recording flow:
 
 1. **Idle** — Tap "Start Recording" to begin capture
-2. **Recording** — Spinner while the device listens (5-second window)
-3. **Captured** — Shows pulse count and protocol; enter a name and pick a slot (1–5)
+2. **Recording** — Spinner with live progress: "Press your remote" → "Got 1 of 3" → "Got 2 of 3" → "Processing…"
+   Press the remote 3 times; the firmware captures each press, extracts a clean frame, and averages the pulse timings.
+3. **Captured** — Shows pulse count and detected protocol; enter a name and pick a slot (1–5)
 4. **Saving** — Saves to the device; dismisses and refreshes the Slots tab on success
 
 ## Project Structure
@@ -85,7 +86,7 @@ expo/
 
 On the first connection to a new device:
 
-1. iOS/Android shows a system-level pairing dialog: *"Enter the code shown on GarageDoor433"*
+1. iOS/Android shows a system-level pairing dialog: _"Enter the code shown on GarageDoor433"_
 2. The OLED on the device wakes and displays the 6-digit PIN
 3. After the user enters it, the devices are **bonded** — no PIN is required on subsequent connections
 4. The device stores bond keys in `/ble_bonds.json` on its flash, surviving reboots
@@ -94,27 +95,28 @@ The app shows **"Pairing…"** in the Settings status row while this dialog is a
 
 ### Services
 
-| Module | Role |
-|---|---|
-| `ble-manager.ts` | Singleton `BLEManager` class — wraps `react-native-ble-plx`, manages scan/connect/notify lifecycle |
-| `device-service.ts` | Async functions that send JSON commands and await matching responses |
-| `contexts/ble-context.tsx` | React context that exposes `connectionState` and drives auto-connect |
+| Module                     | Role                                                                                               |
+| -------------------------- | -------------------------------------------------------------------------------------------------- |
+| `ble-manager.ts`           | Singleton `BLEManager` class — wraps `react-native-ble-plx`, manages scan/connect/notify lifecycle |
+| `device-service.ts`        | Async functions that send JSON commands and await matching responses                               |
+| `contexts/ble-context.tsx` | React context that exposes `connectionState` and drives auto-connect                               |
 
 ### Device Service API
 
-| Function | Description |
-|---|---|
-| `connect()` | Manual scan (10 s timeout) and connect |
-| `autoConnect()` | Background scan (5 s timeout), silently no-ops if unavailable |
-| `disconnect()` | Disconnect and clean up |
-| `isConnected()` | Synchronous connection state check |
-| `getSlots()` | List all saved signal slots |
-| `playSlot(slot)` | Replay a saved signal |
-| `startRecording()` | Begin OOK signal capture |
-| `stopRecording()` | Stop capture, returns pulse count and protocol |
-| `saveSignal(slot, name, recording)` | Save a captured signal to a slot |
-| `deleteSlot(slot)` | Delete a saved signal |
-| `getStatus()` | Device state, battery voltage, saved signal count |
+| Function                            | Description                                                   |
+| ----------------------------------- | ------------------------------------------------------------- |
+| `connect()`                         | Manual scan (10 s timeout) and connect                        |
+| `autoConnect()`                     | Background scan (5 s timeout), silently no-ops if unavailable |
+| `disconnect()`                      | Disconnect and clean up                                       |
+| `isConnected()`                     | Synchronous connection state check                            |
+| `getSlots()`                        | List all saved signal slots                                   |
+| `playSlot(slot)`                    | Replay a saved signal                                         |
+| `recordMultiPress(count, onProgress)` | Multi-press averaging: capture N presses with live progress callback |
+| `startRecording()`                  | Begin OOK signal capture (single press)                       |
+| `stopRecording()`                   | Stop capture, returns pulse count and protocol                |
+| `saveSignal(slot, name, recording)` | Save a captured signal to a slot                              |
+| `deleteSlot(slot)`                  | Delete a saved signal                                         |
+| `getStatus()`                       | Device state, battery voltage, saved signal count             |
 
 ## Getting Started
 
@@ -158,6 +160,8 @@ npx tsc --noEmit   # TypeScript check
 - [x] Implement real BLE service using `react-native-ble-plx`
 - [x] BLE PIN pairing with persistent bonding
 - [x] Auto-connect on app launch and foreground
-- [ ] Slot deletion (swipe-to-delete or long-press)
+- [x] Multi-press signal averaging
+- [x] Battery percentage display (LiPo discharge curve)
+- [x] Slot deletion (swipe-to-delete)
 - [ ] Haptic feedback on signal replay
 - [ ] Signal strength / RSSI display during recording

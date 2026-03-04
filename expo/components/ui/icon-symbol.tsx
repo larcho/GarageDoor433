@@ -3,7 +3,7 @@
 import { ComponentProps } from 'react';
 import { OpaqueColorValue, type StyleProp, type TextStyle } from 'react-native';
 
-import { SymbolViewProps,SymbolWeight } from 'expo-symbols';
+import { SymbolViewProps, SymbolWeight } from 'expo-symbols';
 import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
 type IconMapping = Record<SymbolViewProps['name'], ComponentProps<typeof MaterialIcons>['name']>;
@@ -21,13 +21,13 @@ const MAPPING = {
   'chevron.right': 'chevron-right',
   'lock.open.fill': 'lock-open',
   'gearshape.fill': 'settings',
-  'plus': 'add',
+  plus: 'add',
   'play.fill': 'play-arrow',
   'record.circle': 'fiber-manual-record',
   'stop.fill': 'stop',
-  'wifi': 'wifi',
+  wifi: 'wifi',
   'wifi.slash': 'wifi-off',
-  'trash': 'delete',
+  trash: 'delete',
 } as IconMapping;
 
 /**

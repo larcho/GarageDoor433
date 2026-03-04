@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, View } from 'react-native';
 
-import { router,Stack, useFocusEffect } from 'expo-router';
+import { router, Stack, useFocusEffect } from 'expo-router';
 import {
   Button,
   ContentUnavailableView,
@@ -74,47 +74,61 @@ export default function SlotsScreen() {
         }}
       />
       <View style={{ flex: 1 }}>
-        <Host style={{ flex: 1, backgroundColor: colorScheme === 'dark' ? '#151718' : '#fff' }} colorScheme={colorScheme}>
-          {!loading && (slots.length === 0 ? (
-            <ContentUnavailableView
-              title="No Saved Signals"
-              systemImage="antenna.radiowaves.left.and.right"
-              description="Tap + to record a new signal"
-            />
-          ) : (
-            <List listStyle="insetGrouped">
-              <Section>
-                {slots.map((slot) => (
-                  <Button
-                    key={slot.slot}
-                    onPress={() => router.push({ pathname: '/(tabs)/(slots)/[slot]', params: { slot: slot.slot } })}
-                    modifiers={[buttonStyle('plain')]}
-                  >
-                    <HStack spacing={12}>
-                      <Image systemName="waveform" size={20} color={tint} />
-                      <VStack alignment="leading" spacing={2}>
-                        <Text weight="semibold">{slot.name}</Text>
-                        <Text size={13} color="secondary">
-                          {`Slot ${slot.slot} · ${slot.pulseCount} pulses`}
-                        </Text>
-                      </VStack>
-                      <Spacer />
-                      <Button
-                        onPress={() => handlePlay(slot)}
-                        modifiers={[buttonStyle('plain'), disabled(playingSlot === slot.slot)]}
-                      >
-                        {playingSlot === slot.slot ? (
-                          <ProgressView modifiers={[progressViewStyle('circular'), frame({ width: 20, height: 20 })]} />
-                        ) : (
-                          <Image systemName="play.fill" size={20} color={tint} />
-                        )}
-                      </Button>
-                    </HStack>
-                  </Button>
-                ))}
-              </Section>
-            </List>
-          ))}
+        <Host
+          style={{ flex: 1, backgroundColor: colorScheme === 'dark' ? '#151718' : '#fff' }}
+          colorScheme={colorScheme}
+        >
+          {!loading &&
+            (slots.length === 0 ? (
+              <ContentUnavailableView
+                title="No Saved Signals"
+                systemImage="antenna.radiowaves.left.and.right"
+                description="Tap + to record a new signal"
+              />
+            ) : (
+              <List listStyle="insetGrouped">
+                <Section>
+                  {slots.map((slot) => (
+                    <Button
+                      key={slot.slot}
+                      onPress={() =>
+                        router.push({
+                          pathname: '/(tabs)/(slots)/[slot]',
+                          params: { slot: slot.slot },
+                        })
+                      }
+                      modifiers={[buttonStyle('plain')]}
+                    >
+                      <HStack spacing={12}>
+                        <Image systemName="waveform" size={20} color={tint} />
+                        <VStack alignment="leading" spacing={2}>
+                          <Text weight="semibold">{slot.name}</Text>
+                          <Text size={13} color="secondary">
+                            {`Slot ${slot.slot} · ${slot.pulseCount} pulses`}
+                          </Text>
+                        </VStack>
+                        <Spacer />
+                        <Button
+                          onPress={() => handlePlay(slot)}
+                          modifiers={[buttonStyle('plain'), disabled(playingSlot === slot.slot)]}
+                        >
+                          {playingSlot === slot.slot ? (
+                            <ProgressView
+                              modifiers={[
+                                progressViewStyle('circular'),
+                                frame({ width: 20, height: 20 }),
+                              ]}
+                            />
+                          ) : (
+                            <Image systemName="play.fill" size={20} color={tint} />
+                          )}
+                        </Button>
+                      </HStack>
+                    </Button>
+                  ))}
+                </Section>
+              </List>
+            ))}
           <RecordSheet
             isPresented={sheetOpen}
             onIsPresentedChange={setSheetOpen}
@@ -122,7 +136,17 @@ export default function SlotsScreen() {
           />
         </Host>
         {loading && (
-          <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
             <ActivityIndicator size="large" color={tint} />
           </View>
         )}

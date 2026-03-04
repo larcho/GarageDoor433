@@ -27,6 +27,7 @@ The on-device firmware running on the LILYGO T3 LoRa32 V1.6.1. Handles OOK signa
 - SX1276 in OOK continuous mode at 433.92 MHz
 - IRQ-based edge recording with glitch filtering
 - JSON-based BLE API for record, play, save, delete, and status
+- **Multi-press averaging** — records N presses of the remote, extracts a clean frame from each, and averages pulse timings for a noise-reduced signal
 - **Authenticated BLE pairing** — 6-digit PIN shown on OLED, bonded phones reconnect silently
 - SSD1306 OLED display — powers on only when needed (boot, pairing, recording, transmitting)
 - Hardware button for quick-replay of the last used slot
@@ -38,8 +39,8 @@ Companion iOS/Android app that connects to the LoRa32 board over BLE. Provides a
 - **Auto-connect** — finds and connects to the device automatically on every app launch and foreground
 - **BLE PIN pairing** — standard OS dialog on first connect; silent reconnect thereafter
 - **Slots tab** — list of saved signals with one-tap replay
-- **Settings tab** — real-time connection status, device info, manual connect/disconnect
-- **Record sheet** — step-based signal capture flow
+- **Settings tab** — real-time connection status, device info (state, battery %, voltage, signal count), manual connect/disconnect
+- **Record sheet** — multi-press recording flow with live per-press progress
 
 ## Getting Started
 

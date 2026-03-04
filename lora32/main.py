@@ -25,6 +25,7 @@ STATE_IDLE = 0
 STATE_RECORDING = 1
 STATE_CAPTURED = 2
 STATE_REPLAYING = 3
+STATE_RECORDING_MULTI = 4
 
 # Display refresh interval
 DISPLAY_UPDATE_MS = 200
@@ -157,6 +158,17 @@ class App:
                 self.led.value(0)
             else:
                 self.ble.send_json({"status": "error", "action": "stop", "message": "Not recording"})
+
+        elif action == "record_multi":
+            count = req.get("count", 3)
+            if self.state == STATE_IDLE or self.state == STATE_CAPTURED:
+                self.state = STATE_RECORDING_MULTI
+                self.recorder.start_recording_multi(count)
+                self._keep_display()
+                self.led.value(1)
+                self.ble.send_json({"status": "ok", "action": "record_multi"})
+            else:
+                self.ble.send_json({"status": "error", "action": "record_multi", "message": "Busy"})
 
         elif action == "play":
             slot = req.get("slot")
@@ -449,8 +461,16 @@ class App:
             pulse_count = self.recorder.get_live_pulse_count()
             elapsed = self.recorder.get_elapsed_ms()
             self.display.screen_recording(pulse_count, elapsed, pulse_count > 0)
+            if (now // 250) % 2:
+                self.led.value(1)
+            else:
+                self.led.value(0)
 
-            # Blink LED during recording
+        elif self.state == STATE_RECORDING_MULTI:
+            self._disp_until = now + DISPLAY_LINGER_MS
+            captured = self.recorder.get_multi_captured()
+            target = self.recorder.get_multi_target()
+            self.display.screen_recording_multi(captured, target)
             if (now // 250) % 2:
                 self.led.value(1)
             else:
@@ -458,10 +478,59 @@ class App:
         # STATE_IDLE / STATE_CAPTURED / STATE_REPLAYING:
         # Display shows the last drawn frame until _disp_until expires.
 
+    def _finish_multi_recording(self):
+        """Finalise multi-press session and send result over BLE."""
+        self.recorder.finish_multi_recording()
+        self.led.value(0)
+        if self.recorder.has_signal():
+            self.state = STATE_CAPTURED
+            proto = self.recorder.detect_protocol()
+            self._keep_display()
+            self.display.screen_captured(self.recorder.pulse_count, proto)
+            self.ble.send_json({
+                "status": "ok", "action": "record_done",
+                "pulse_count": self.recorder.pulse_count, "protocol": proto,
+            })
+        else:
+            self.state = STATE_IDLE
+            self._keep_display()
+            self.display.screen_error("No signal detected")
+            self.ble.send_json({
+                "status": "error", "action": "record_done",
+                "message": "No signal detected",
+            })
+
+    def _check_multi_press(self):
+        """Detect completed presses during multi-press recording."""
+        if self.state != STATE_RECORDING_MULTI:
+            return
+        if self.recorder.check_press_complete():
+            captured = self.recorder.get_multi_captured()
+            target = self.recorder.get_multi_target()
+            self.ble.send_json({
+                "action": "record_progress",
+                "captured": captured,
+                "target": target,
+            })
+            if captured >= target:
+                self._finish_multi_recording()
+
     def _check_recording_timeout(self):
         """Auto-stop recording after timeout."""
         if self.state == STATE_RECORDING and self.recorder.is_capture_timeout():
             self._process_command("STOP")
+        elif self.state == STATE_RECORDING_MULTI:
+            from signal_recorder import MULTI_PRESS_TIMEOUT_MS
+            elapsed = time.ticks_diff(time.ticks_ms(), self.recorder.capture_start)
+            if elapsed > MULTI_PRESS_TIMEOUT_MS:
+                self._keep_display()
+                self.ble.send_json({
+                    "status": "error", "action": "record_done",
+                    "message": "Timed out — press remote faster",
+                })
+                self.recorder.finish_multi_recording()
+                self.state = STATE_IDLE
+                self.led.value(0)
 
     def run(self):
         """Main event loop."""
@@ -479,6 +548,9 @@ class App:
 
             # Check recording timeout
             self._check_recording_timeout()
+
+            # Check for completed presses in multi-press mode
+            self._check_multi_press()
 
             # Update display
             self._update_display()

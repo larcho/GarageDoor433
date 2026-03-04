@@ -27,10 +27,10 @@ import {
 } from '@expo/ui/swift-ui/modifiers';
 
 import {
+  isConnected,
   type RecordingResult,
+  recordMultiPress,
   saveSignal,
-  startRecording,
-  stopRecording,
 } from '@/services/device-service';
 
 type Step = 'idle' | 'recording' | 'captured' | 'saving';
@@ -48,12 +48,14 @@ export function RecordSheet({ isPresented, onIsPresentedChange, onSaved }: Recor
   const [result, setResult] = useState<RecordingResult | null>(null);
   const [name, setName] = useState('');
   const [slotIndex, setSlotIndex] = useState(0);
+  const [pressProgress, setPressProgress] = useState({ captured: 0, target: 3 });
 
   const reset = () => {
     setStep('idle');
     setResult(null);
     setName('');
     setSlotIndex(0);
+    setPressProgress({ captured: 0, target: 3 });
   };
 
   const handleClose = (presented: boolean) => {
@@ -64,22 +66,28 @@ export function RecordSheet({ isPresented, onIsPresentedChange, onSaved }: Recor
   };
 
   const handleStartRecording = async () => {
+    if (!isConnected()) {
+      Alert.alert('Not Connected', 'Connect to the device before recording a signal.');
+      return;
+    }
     setStep('recording');
+    setPressProgress({ captured: 0, target: 3 });
     try {
-      await startRecording();
-      await new Promise((r) => setTimeout(r, 5000));
-      const captured = await stopRecording();
+      const captured = await recordMultiPress(3, (captured, target) => {
+        setPressProgress({ captured, target });
+      });
       setResult(captured);
       setStep('captured');
-    } catch {
-      Alert.alert('Error', 'Recording failed');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      Alert.alert('Recording Failed', message);
       setStep('idle');
     }
   };
 
   const handleSave = async () => {
     if (!name.trim()) {
-      Alert.alert('Name Required', 'Please enter a name for this signal');
+      Alert.alert('Name Required', 'Please enter a name for this signal.');
       return;
     }
     if (!result) return;
@@ -93,23 +101,19 @@ export function RecordSheet({ isPresented, onIsPresentedChange, onSaved }: Recor
         reset();
         onSaved();
       } else {
-        Alert.alert('Error', 'Failed to save signal');
+        Alert.alert('Save Failed', `Could not save to slot ${slotIndex + 1}.`);
         setStep('captured');
       }
-    } catch {
-      Alert.alert('Error', 'Could not save signal');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      Alert.alert('Save Failed', message);
       setStep('captured');
     }
   };
 
   return (
     <BottomSheet isPresented={isPresented} onIsPresentedChange={handleClose}>
-      <Group
-        modifiers={[
-          presentationDetents(['medium']),
-          presentationDragIndicator('visible'),
-        ]}
-      >
+      <Group modifiers={[presentationDetents(['medium']), presentationDragIndicator('visible')]}>
         {step === 'idle' && (
           <VStack alignment="center" spacing={24} modifiers={[padding({ all: 24 })]}>
             <Button
@@ -129,10 +133,16 @@ export function RecordSheet({ isPresented, onIsPresentedChange, onSaved }: Recor
             <ProgressView modifiers={[scaleEffect(2)]} />
             <VStack alignment="center" spacing={8}>
               <Text weight="bold" size={24}>
-                Recording...
+                {pressProgress.captured === 0
+                  ? 'Press your remote'
+                  : pressProgress.captured < pressProgress.target
+                    ? `Got ${pressProgress.captured} of ${pressProgress.target}`
+                    : 'Processing...'}
               </Text>
-              <Text color="secondary" size={16}>
-                Activate your remote now
+              <Text color="secondary" size={16} modifiers={[multilineTextAlignment('center')]}>
+                {pressProgress.captured < pressProgress.target
+                  ? `Press ${pressProgress.captured + 1} of ${pressProgress.target}`
+                  : 'Averaging signal...'}
               </Text>
             </VStack>
           </VStack>
@@ -140,36 +150,37 @@ export function RecordSheet({ isPresented, onIsPresentedChange, onSaved }: Recor
 
         {(step === 'captured' || step === 'saving') && result && (
           <>
-          <Form modifiers={[padding({ top: 16 })]}>
-            <Section title="Signal Captured">
-              <LabeledContent label="Pulses">
-                <Text>{String(result.pulseCount)}</Text>
-              </LabeledContent>
-              <LabeledContent label="Protocol">
-                <Text>{result.protocol}</Text>
-              </LabeledContent>
-            </Section>
+            <Form modifiers={[padding({ top: 16 })]}>
+              <Section title="Signal Captured">
+                <LabeledContent label="Pulses">
+                  <Text>{String(result.pulseCount)}</Text>
+                </LabeledContent>
+                <LabeledContent label="Protocol">
+                  <Text>{result.protocol}</Text>
+                </LabeledContent>
+              </Section>
 
-            <Section title="Save">
-              <TextField
-                placeholder="Signal Name"
-                onChangeText={setName}
-                defaultValue={name}
-              />
-              <Picker
-                label="Slot"
-                options={SLOT_OPTIONS}
-                selectedIndex={slotIndex}
-                variant="segmented"
-                onOptionSelected={(e) => setSlotIndex(e.nativeEvent.index)}
-              />
-            </Section>
-          </Form>
-          <Button
-            onPress={handleSave}
-            label={step === 'saving' ? 'Saving…' : 'Save Signal'}
-            modifiers={[buttonStyle('borderedProminent'), controlSize('large'), disabled(step === 'saving'), padding({ horizontal: 20, bottom: 16 })]}
-          />
+              <Section title="Save">
+                <TextField placeholder="Signal Name" onChangeText={setName} defaultValue={name} />
+                <Picker
+                  label="Slot"
+                  options={SLOT_OPTIONS}
+                  selectedIndex={slotIndex}
+                  variant="segmented"
+                  onOptionSelected={(e) => setSlotIndex(e.nativeEvent.index)}
+                />
+              </Section>
+            </Form>
+            <Button
+              onPress={handleSave}
+              label={step === 'saving' ? 'Saving…' : 'Save Signal'}
+              modifiers={[
+                buttonStyle('borderedProminent'),
+                controlSize('large'),
+                disabled(step === 'saving'),
+                padding({ horizontal: 20, bottom: 16 }),
+              ]}
+            />
           </>
         )}
       </Group>

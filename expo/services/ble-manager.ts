@@ -6,8 +6,8 @@ const NUS_RX_UUID = '6E400002-B5A3-F393-E0A9-E50E24DCCA9E';
 const NUS_TX_UUID = '6E400003-B5A3-F393-E0A9-E50E24DCCA9E';
 
 const DEVICE_NAME = 'GarageDoor433';
-const SCAN_TIMEOUT_MS = 10000;       // manual connect scan timeout
-const AUTO_SCAN_TIMEOUT_MS = 5000;   // background auto-connect scan timeout
+const SCAN_TIMEOUT_MS = 10000; // manual connect scan timeout
+const AUTO_SCAN_TIMEOUT_MS = 5000; // background auto-connect scan timeout
 
 export type ConnectionState = 'disconnected' | 'scanning' | 'connecting' | 'connected';
 type ConnectionListener = (state: ConnectionState) => void;
@@ -108,13 +108,10 @@ class BLEManager {
       await connected.discoverAllServicesAndCharacteristics();
       this.device = connected;
 
-      this.disconnectSub = this.manager.onDeviceDisconnected(
-        connected.id,
-        () => {
-          this.cleanup();
-          this.setState('disconnected');
-        },
-      );
+      this.disconnectSub = this.manager.onDeviceDisconnected(connected.id, () => {
+        this.cleanup();
+        this.setState('disconnected');
+      });
 
       this.rxBuffer = '';
       this.notifySub = connected.monitorCharacteristicForService(

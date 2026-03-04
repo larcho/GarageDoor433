@@ -19,6 +19,8 @@ MAX_PULSES = 500          # Max pulses to capture per recording
 MAX_SLOTS = 5             # Number of save slots
 REPLAY_REPEATS = 8        # How many times to repeat code on replay
 SIGNALS_DIR = "/signals"
+PRESS_GAP_MS = 150        # Silence > 150ms = end of one button press
+MULTI_PRESS_TIMEOUT_MS = 30000  # 30s total timeout for multi-press session
 
 
 class SignalRecorder:
@@ -80,7 +82,7 @@ class SignalRecorder:
         self.radio.stop()
         self._process_edges()
 
-    def _process_edges(self):
+    def _compute_pulses(self, raw):
         """Convert raw edge timestamps into (high_us, low_us) pulse pairs.
 
         Since pin.value() is unreliable in MicroPython ISRs (latency causes
@@ -92,11 +94,9 @@ class SignalRecorder:
         3. Find sync gap to anchor HIGH/LOW polarity
         4. Pair alternating intervals into (high, low) tuples
         """
-        self.pulses = []
-        raw = self._edges
-
+        pulses = []
         if len(raw) < 4:
-            return
+            return pulses
 
         # Step 1: Compute intervals between consecutive edge timestamps
         intervals = []
@@ -104,11 +104,10 @@ class SignalRecorder:
             intervals.append(time.ticks_diff(raw[i], raw[i - 1]))
 
         # Step 2: Reconstruct clean intervals by merging glitch clusters.
-        # Real OOK pulses are >= 250us. Anything shorter is a glitch fragment.
         MERGE_THRESH = 250
         clean = []
         acc = 0
-        gc = 0  # glitch count
+        gc = 0
 
         for interval in intervals:
             if interval < MERGE_THRESH:
@@ -116,28 +115,20 @@ class SignalRecorder:
                 gc += 1
             else:
                 if gc == 0:
-                    # No pending glitches, save interval directly
                     clean.append(interval)
                 elif gc % 2 == 1:
-                    # Odd glitch count: fragments of a split real pulse
-                    # Save reconstructed pulse, then the current real interval
                     if acc >= MIN_PULSE_US:
                         clean.append(acc)
                     clean.append(interval)
                 else:
-                    # Even glitch count: glitch pair cancelled out
-                    # Merge accumulated time into this interval
                     clean.append(acc + interval)
                 acc = 0
                 gc = 0
 
-        # Handle trailing glitch accumulator
         if gc > 0 and gc % 2 == 1 and acc >= MIN_PULSE_US:
             clean.append(acc)
 
         # Step 3: Find sync gap to anchor polarity.
-        # The sync gap is a long LOW period between frames.
-        # The interval after the sync gap is HIGH (first pulse of frame).
         start = 0
         for i in range(len(clean)):
             if clean[i] > MAX_GAP_US // 2:
@@ -149,12 +140,15 @@ class SignalRecorder:
         while i + 1 < len(clean):
             high_us = clean[i]
             low_us = clean[i + 1]
-
             if high_us >= MIN_PULSE_US:
-                self.pulses.append((high_us, low_us))
-
+                pulses.append((high_us, low_us))
             i += 2
 
+        return pulses
+
+    def _process_edges(self):
+        """Process self._edges into self.pulses."""
+        self.pulses = self._compute_pulses(self._edges)
         self.pulse_count = len(self.pulses)
 
     def is_capture_timeout(self):
@@ -225,33 +219,135 @@ class SignalRecorder:
 
         return "unknown"
 
-    def extract_single_frame(self):
-        """Extract one complete code frame from repeated transmission."""
-        if not self.pulses or len(self.pulses) < 4:
-            return self.pulses
+    def _extract_single_frame_from(self, pulses):
+        """Extract one complete code frame from a pulse list."""
+        if not pulses or len(pulses) < 4:
+            return pulses
 
-        # Find the longest low period (sync gap between frames)
-        lows = [(low, i) for i, (_, low) in enumerate(self.pulses) if low > 0]
+        lows = [(low, i) for i, (_, low) in enumerate(pulses) if low > 0]
         if not lows:
-            return self.pulses
+            return pulses
 
         lows.sort(reverse=True)
         avg_low = sum(l for l, _ in lows) / len(lows)
-
-        # Find sync gaps (much longer than average)
         sync_indices = [i for low, i in lows if low > avg_low * 3]
         sync_indices.sort()
 
         if len(sync_indices) >= 2:
-            # Return pulses between first two sync gaps (one complete frame)
             start = sync_indices[0] + 1
             end = sync_indices[1] + 1
-            return self.pulses[start:end]
+            return pulses[start:end]
         elif len(sync_indices) == 1:
-            # Return from start to first sync
-            return self.pulses[:sync_indices[0] + 1]
+            return pulses[:sync_indices[0] + 1]
 
-        return self.pulses
+        return pulses
+
+    def extract_single_frame(self):
+        """Extract one complete code frame from self.pulses."""
+        return self._extract_single_frame_from(self.pulses)
+
+    # ------------------------------------------------------------------
+    # Multi-press averaging
+    # ------------------------------------------------------------------
+
+    def _extract_frame_from_edges(self, edges):
+        """Process a slice of raw edges into a single code frame."""
+        pulses = self._compute_pulses(edges)
+        return list(self._extract_single_frame_from(pulses))
+
+    def _average_frames(self, frames):
+        """Average pulse timings across multiple captured frames."""
+        if not frames:
+            return []
+        if len(frames) == 1:
+            return list(frames[0])
+
+        # Find most common frame length and keep only matching frames
+        lengths = {}
+        for f in frames:
+            n = len(f)
+            lengths[n] = lengths.get(n, 0) + 1
+        target_len = max(lengths, key=lengths.get)
+        valid = [f for f in frames if len(f) == target_len]
+
+        n = len(valid)
+        averaged = []
+        for i in range(target_len):
+            avg_high = sum(f[i][0] for f in valid) // n
+            avg_low = sum(f[i][1] for f in valid) // n
+            averaged.append((avg_high, avg_low))
+        return averaged
+
+    def start_recording_multi(self, count):
+        """Initialize a multi-press averaging session and begin recording."""
+        self._multi_target = count
+        self._multi_frames = []
+        self._multi_last_edge_count = 0
+        self._multi_press_start_idx = 0
+        self._multi_in_silence = False
+        self.start_recording()
+        # Set timer AFTER start_recording's 100ms settle delay
+        self._multi_last_edge_time = time.ticks_ms()
+
+    def check_press_complete(self):
+        """Call from the main loop during multi-press recording.
+
+        Returns True when a new press has been fully captured and added.
+        Detects a complete press as: enough edges followed by > PRESS_GAP_MS silence.
+        """
+        current_count = len(self._edges)
+        now = time.ticks_ms()
+
+        if current_count > self._multi_last_edge_count:
+            # New edges arriving — reset silence tracking
+            self._multi_last_edge_count = current_count
+            self._multi_last_edge_time = now
+            self._multi_in_silence = False
+            return False
+
+        if self._multi_in_silence:
+            return False  # Already processed this silence window
+
+        if current_count <= self._multi_press_start_idx + 8:
+            return False  # Not enough edges for a valid press
+
+        if time.ticks_diff(now, self._multi_last_edge_time) < PRESS_GAP_MS:
+            return False  # Silence not long enough yet
+
+        # Press complete — snapshot and reset the edge buffer
+        press_edges = self._edges[self._multi_press_start_idx:current_count]
+
+        # Briefly disable IRQ to safely reset the buffer
+        self.dio2.irq(handler=None)
+        self._edges = list(self._edges[current_count:])
+        self._multi_press_start_idx = 0
+        self._multi_last_edge_count = 0
+        self._multi_in_silence = True
+        self.dio2.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING,
+                      handler=self._irq_handler)
+
+        frame = self._extract_frame_from_edges(press_edges)
+        if len(frame) >= 4:
+            self._multi_frames.append(frame)
+            return True
+        return False
+
+    def get_multi_captured(self):
+        return len(self._multi_frames)
+
+    def get_multi_target(self):
+        return self._multi_target
+
+    def finish_multi_recording(self):
+        """Stop recording and set self.pulses to the averaged result."""
+        self.dio2.irq(handler=None)
+        self.recording = False
+        self.radio.stop()
+        self.pulses = self._average_frames(self._multi_frames)
+        self.pulse_count = len(self.pulses)
+        self._multi_frames = []
+
+    # ------------------------------------------------------------------
 
     @micropython.native
     def _replay_frame(self, dio2, pulses):

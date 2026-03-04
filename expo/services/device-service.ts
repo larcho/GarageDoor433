@@ -102,6 +102,41 @@ export async function startRecording(): Promise<void> {
   await sendAndAwait({ action: 'record' }, 'record');
 }
 
+export function recordMultiPress(
+  count: number,
+  onProgress: (captured: number, target: number) => void,
+): Promise<RecordingResult> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      unsub();
+      reject(new Error('Multi-press recording timed out'));
+    }, 60000);
+
+    const unsub = bleManager.onResponse((json) => {
+      if (json.action === 'record_progress') {
+        onProgress(json.captured as number, json.target as number);
+      } else if (json.action === 'record_done') {
+        clearTimeout(timeout);
+        unsub();
+        if (json.status === 'error') {
+          reject(new Error((json.message as string) ?? 'Recording failed'));
+        } else {
+          resolve({
+            pulseCount: (json.pulse_count as number) ?? 0,
+            protocol: (json.protocol as string) ?? 'unknown',
+          });
+        }
+      }
+    });
+
+    bleManager.sendCommand({ action: 'record_multi', count }).catch((err) => {
+      clearTimeout(timeout);
+      unsub();
+      reject(err);
+    });
+  });
+}
+
 export async function stopRecording(): Promise<RecordingResult> {
   const resp = await sendAndAwait({ action: 'stop' }, 'stop');
   return {

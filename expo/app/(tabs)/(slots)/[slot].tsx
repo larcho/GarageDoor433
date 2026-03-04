@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 
-import { router,Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { Button, Host, Spacer, VStack } from '@expo/ui/swift-ui';
 import {
   buttonStyle,
@@ -177,16 +177,35 @@ export default function SlotDetailScreen() {
         }}
       />
       <View style={[styles.screen, { backgroundColor: bg }]}>
-
         {/* Info + waveform cards */}
         <View style={styles.content}>
           <View style={[styles.card, { backgroundColor: cardBg }]}>
-            <StatRow label="Pulses" value={String(signal.pulseCount)} textColor={textColor} secondaryColor={secondaryColor} />
+            <StatRow
+              label="Pulses"
+              value={String(signal.pulseCount)}
+              textColor={textColor}
+              secondaryColor={secondaryColor}
+            />
             {stats && (
               <>
-                <StatRow label="Duration" value={`${stats.totalMs.toFixed(1)} ms`} textColor={textColor} secondaryColor={secondaryColor} />
-                <StatRow label="High range" value={`${stats.minHigh}–${stats.maxHigh} µs`} textColor={textColor} secondaryColor={secondaryColor} />
-                <StatRow label="Low range" value={`${stats.minLow}–${stats.maxLow} µs`} textColor={textColor} secondaryColor={secondaryColor} />
+                <StatRow
+                  label="Duration"
+                  value={`${stats.totalMs.toFixed(1)} ms`}
+                  textColor={textColor}
+                  secondaryColor={secondaryColor}
+                />
+                <StatRow
+                  label="High range"
+                  value={`${stats.minHigh}–${stats.maxHigh} µs`}
+                  textColor={textColor}
+                  secondaryColor={secondaryColor}
+                />
+                <StatRow
+                  label="Low range"
+                  value={`${stats.minLow}–${stats.maxLow} µs`}
+                  textColor={textColor}
+                  secondaryColor={secondaryColor}
+                />
               </>
             )}
           </View>

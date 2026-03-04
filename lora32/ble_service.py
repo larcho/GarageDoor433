@@ -6,6 +6,7 @@ Supports BLE passkey pairing with persistent bonding (PIN only for new devices).
 
 import bluetooth
 import json
+import os
 import struct
 import time
 
@@ -67,7 +68,7 @@ class BLEService:
 
         # Security config must be set before activating BLE
         try:
-            self._ble.config(bond=True, mitm=True, io=_IO_DISPLAY_ONLY)
+            self._ble.config(bond=True, mitm=True, io=_IO_DISPLAY_ONLY, gap_name=name)
         except Exception as e:
             print("BLE: security config error:", e)
 
@@ -133,12 +134,17 @@ class BLEService:
         if event == _IRQ_CENTRAL_CONNECT:
             self._conn_handle = data[0]
             self._connected = True
-            # Initiate pairing; silently re-authenticates for already-bonded devices
-            # so the PIN only appears for new/unknown devices.
-            try:
-                self._ble.gap_pair(self._conn_handle)
-            except Exception as e:
-                print("BLE: gap_pair error:", e)
+            # Only pair new (unbonded) devices. Bonded devices re-authenticate
+            # automatically via stored LTK — calling gap_pair() on them forces a
+            # fresh pairing, generating new keys that overwrite the stored bond and
+            # break the next reconnect.
+            if not self._bonds:
+                try:
+                    self._ble.gap_pair(self._conn_handle)
+                except Exception as e:
+                    print("BLE: gap_pair error:", e)
+            else:
+                print("BLE: bonded device reconnected, skipping re-pair")
 
         elif event == _IRQ_CENTRAL_DISCONNECT:
             self._conn_handle = None
@@ -173,14 +179,15 @@ class BLEService:
 
         elif event == _IRQ_PASSKEY_ACTION:
             # Fired when pairing requires user interaction.
-            # With IO=display_only this is always DISPLAY — show the PIN.
-            conn_handle, action, passkey = data
+            # With IO=display_only this is always DISPLAY — we generate the PIN.
+            conn_handle, action, _ = data
             if action == _PASSKEY_ACTION_DISPLAY:
+                # Generate a random 6-digit passkey (stack passes 0, we must supply it)
+                passkey = int.from_bytes(os.urandom(3), 'big') % 1000000
                 pin_str = "{:06d}".format(passkey)
                 print("BLE: pairing PIN =", pin_str)
                 if self._on_pin:
                     self._on_pin(pin_str)
-                # Acknowledge to the BLE stack that we have displayed the passkey
                 try:
                     self._ble.gap_passkey(conn_handle, action, passkey)
                 except Exception as e:
