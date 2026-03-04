@@ -1,12 +1,12 @@
 # GarageDoor433 — OOK Signal Recorder & Replayer
 
-Capture, store, and replay 433.92 MHz OOK radio signals (garage door remotes, etc.) using a LILYGO T3 LoRa32 V1.6.1 board. Controlled via Bluetooth Low Energy from any BLE serial app on your phone.
+Capture, store, and replay 433.92 MHz OOK radio signals (garage door remotes, etc.) using a LILYGO T3 LoRa32 V1.6.1 board. Controlled via Bluetooth Low Energy from the companion Expo app or any BLE serial tool.
 
 ## Hardware
 
 - **Board:** LILYGO T3 LoRa32 V1.6.1 (ESP32 + SX1276 @ 433 MHz)
-- **Display:** SSD1306 OLED 128x32
-- **Button:** GPIO0 (BOOT button) — press to quick-replay last used slot
+- **Display:** SSD1306 OLED 128×32
+- **Button:** GPIO0 (BOOT button) — press to quick-replay the last used slot
 - **Firmware:** MicroPython v1.27.0 (custom LILYGO build with `lora32` module)
 
 ## How It Works
@@ -22,10 +22,10 @@ Capture, store, and replay 433.92 MHz OOK radio signals (garage door remotes, et
 | File | Description |
 |---|---|
 | `main.py` | Application entry point — event loop, state machine, BLE command dispatch, button/display handling |
-| `ble_service.py` | BLE GATT server using Nordic UART Service (NUS) — advertises as `GarageDoor433` |
+| `ble_service.py` | BLE GATT server using Nordic UART Service (NUS) — passkey pairing, persistent bonding, JSON API |
 | `sx1276_ook.py` | Low-level SX1276 driver — SPI register access, OOK RX/TX mode, frequency/power control |
 | `signal_recorder.py` | Signal capture engine — IRQ-based edge recording, glitch filtering, protocol detection, JSON storage, replay |
-| `display.py` | OLED display manager — splash, idle, recording, captured, replaying, and error screens |
+| `display.py` | OLED display manager — splash, recording, captured, replaying, PIN pairing, and error screens |
 
 ### On-device storage
 
@@ -34,6 +34,38 @@ Saved signals live at `/signals/slot_N.json` (N = 1–5). Each file contains:
 ```json
 {"name": "GARAGE", "pulses": [[380, 840], [890, 330], ...], "protocol": "unknown", "pulse_count": 29}
 ```
+
+BLE pairing keys are persisted at `/ble_bonds.json` so paired phones reconnect silently after a reboot. Delete this file to force re-pairing all devices.
+
+## BLE Pairing
+
+The device uses **authenticated BLE pairing** with a 6-digit PIN. The pairing flow happens once per phone:
+
+1. Phone connects → device initiates pairing
+2. A 6-digit PIN appears on the OLED display
+3. iOS/Android prompts you to enter the PIN
+4. After successful pairing, the phone is **bonded** — future connections are silent (no PIN shown)
+
+To unpair all devices and start fresh, delete `/ble_bonds.json` from the board's filesystem:
+
+```bash
+mpremote connect /dev/cu.usbserial-XXXX fs rm :/ble_bonds.json
+mpremote connect /dev/cu.usbserial-XXXX reset
+```
+
+## Display Power Management
+
+The OLED display is off by default and only powers on when needed:
+
+| Event | Display |
+|---|---|
+| Boot | Splash screen for ~4 s then off |
+| BLE pairing PIN | Shows PIN for up to 60 s |
+| Recording | On while recording, off 5 s after |
+| Signal captured / error | On for 5 s then off |
+| Transmitting | On during replay, off 5 s after |
+| Button press (replay) | On during replay, off 5 s after |
+| Idle | Off |
 
 ## BLE API
 
@@ -181,4 +213,10 @@ Read a saved signal:
 
 ```bash
 mpremote connect /dev/cu.usbserial-XXXX fs cat :/signals/slot_1.json
+```
+
+List bonded devices:
+
+```bash
+mpremote connect /dev/cu.usbserial-XXXX fs cat :/ble_bonds.json
 ```

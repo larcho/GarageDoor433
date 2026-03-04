@@ -18,17 +18,26 @@ export interface RecordingResult {
   protocol: string;
 }
 
+export interface SignalData {
+  slot: number;
+  name: string;
+  protocol: string;
+  pulseCount: number;
+  pulses: [number, number][];
+}
+
 const COMMAND_TIMEOUT_MS = 5000;
 
 function sendAndAwait(
   command: Record<string, unknown>,
   matchAction: string,
+  timeoutMs = COMMAND_TIMEOUT_MS,
 ): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       unsub();
       reject(new Error(`Command "${matchAction}" timed out`));
-    }, COMMAND_TIMEOUT_MS);
+    }, timeoutMs);
 
     const unsub = bleManager.onResponse((json) => {
       if (json.action === matchAction) {
@@ -52,6 +61,11 @@ function sendAndAwait(
 
 export async function connect(): Promise<void> {
   await bleManager.connect();
+}
+
+/** Background auto-connect with a short scan timeout. Safe to call repeatedly. */
+export async function autoConnect(): Promise<void> {
+  await bleManager.autoConnect();
 }
 
 export async function disconnect(): Promise<void> {
@@ -117,5 +131,19 @@ export async function getStatus(): Promise<DeviceStatus | null> {
     state: (resp.state as string) ?? 'unknown',
     batteryVoltage: (resp.battery as number) ?? 0,
     savedSignals: (resp.signals as number) ?? 0,
+  };
+}
+
+export async function getSignalData(slot: number): Promise<SignalData | null> {
+  if (!isConnected()) return null;
+  // Use extended timeout — large JSON payload arrives in multiple BLE chunks
+  const resp = await sendAndAwait({ action: 'get_signal', slot }, 'get_signal', 10000);
+  const rawPulses = resp.pulses as Array<[number, number]> | undefined;
+  return {
+    slot,
+    name: (resp.name as string) ?? '',
+    protocol: (resp.protocol as string) ?? 'unknown',
+    pulseCount: (resp.pulse_count as number) ?? 0,
+    pulses: rawPulses ?? [],
   };
 }

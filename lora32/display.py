@@ -23,6 +23,25 @@ class Display:
         self.width = self.oled.width
         self.height = self.oled.height
         self._frame = 0  # Animation frame counter
+        self._powered = True  # Tracks display power state
+
+    def sleep(self):
+        """Turn off the OLED panel to save power."""
+        if self._powered:
+            try:
+                self.oled.poweroff()
+            except Exception:
+                pass
+            self._powered = False
+
+    def wake(self):
+        """Turn on the OLED panel."""
+        if not self._powered:
+            try:
+                self.oled.poweron()
+            except Exception:
+                pass
+            self._powered = True
 
     def clear(self):
         self.oled.fill(0)
@@ -156,4 +175,13 @@ class Display:
         self._center_text("Signal Recorder", ROW1)
         self._center_text("433.92 MHz OOK", ROW2)
         self._center_text("Ready", ROW3)
+        self.show()
+
+    def screen_pin(self, pin):
+        """BLE pairing PIN screen — shown only for new/unknown devices."""
+        self.clear()
+        self._draw_header("BLE PAIRING")
+        self._center_text("PIN:", ROW1)
+        self._center_text(pin, ROW2)
+        self._center_text("Enter on phone", ROW3)
         self.show()

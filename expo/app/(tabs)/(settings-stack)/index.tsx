@@ -1,44 +1,47 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert } from 'react-native';
 
+import { useFocusEffect } from 'expo-router';
 import {
-  Host,
-  List,
-  Section,
-  LabeledContent,
-  Text,
   Button,
+  Host,
+  LabeledContent,
+  List,
   ProgressView,
+  Section,
+  Text,
 } from '@expo/ui/swift-ui';
 import { disabled } from '@expo/ui/swift-ui/modifiers';
 
+import { useBleState } from '@/contexts/ble-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import {
-  connect,
-  disconnect,
-  getStatus,
-  isConnected,
-  type DeviceStatus,
-} from '@/services/device-service';
+import { connect, type DeviceStatus,disconnect, getStatus } from '@/services/device-service';
 
 export default function SettingsScreen() {
   const [status, setStatus] = useState<DeviceStatus | null>(null);
-  const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState(false);
   const colorScheme = useColorScheme() ?? 'light';
 
+  const { connectionState } = useBleState();
+  const connected = connectionState === 'connected';
+  const isSearching = connectionState === 'scanning' || connectionState === 'connecting';
+
+  // Fetch (or clear) device status whenever connection state changes
+  useEffect(() => {
+    if (connected) {
+      getStatus().then(setStatus);
+    } else {
+      setStatus(null);
+    }
+  }, [connected]);
+
+  // Re-fetch status when the user navigates back to this tab
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      setConnected(isConnected());
-      getStatus().then((s) => {
-        if (!cancelled) setStatus(s);
-      });
-      return () => {
-        cancelled = true;
-      };
-    }, [])
+      if (connected) {
+        getStatus().then(setStatus);
+      }
+    }, [connected]),
   );
 
   const handleToggleConnection = async () => {
@@ -49,47 +52,75 @@ export default function SettingsScreen() {
       } else {
         await connect();
       }
-      setConnected(isConnected());
-      const s = await getStatus();
-      setStatus(s);
     } catch {
-      Alert.alert('Error', 'Connection failed');
+      Alert.alert(
+        connected ? 'Disconnect Failed' : 'Connection Failed',
+        connected
+          ? 'Could not disconnect from the device.'
+          : 'Could not find GarageDoor433. Make sure it is powered on and nearby.\n\nFirst time connecting? A 6-digit PIN will appear on the device display — enter it when prompted by iOS.',
+      );
     } finally {
       setBusy(false);
     }
   };
+
+  const statusText = isSearching
+    ? connectionState === 'scanning'
+      ? 'Searching…'
+      : 'Pairing…'
+    : connected
+      ? 'Connected'
+      : 'Disconnected';
+
+  const statusColor = connected ? 'green' : isSearching ? 'orange' : 'red';
+
+  const buttonLabel = busy
+    ? connected
+      ? 'Disconnecting…'
+      : 'Connecting…'
+    : connected
+      ? 'Disconnect'
+      : 'Connect';
 
   return (
     <Host style={{ flex: 1 }} colorScheme={colorScheme}>
       <List listStyle="insetGrouped">
         <Section title="Connection">
           <LabeledContent label="Status">
-            <Text color={connected ? 'green' : 'red'}>
-              {connected ? 'Connected' : 'Disconnected'}
-            </Text>
+            {isSearching ? (
+              <ProgressView />
+            ) : (
+              <Text color={statusColor}>{statusText}</Text>
+            )}
           </LabeledContent>
           <Button
             onPress={handleToggleConnection}
-            label={busy ? 'Connecting…' : connected ? 'Disconnect' : 'Connect'}
-            modifiers={[disabled(busy)]}
+            label={buttonLabel}
+            modifiers={[disabled(busy || isSearching)]}
           />
         </Section>
 
         <Section title="Device">
-          {status ? (
-            <>
-              <LabeledContent label="State">
-                <Text>{status.state}</Text>
-              </LabeledContent>
-              <LabeledContent label="Battery">
-                <Text>{`${status.batteryVoltage.toFixed(2)} V`}</Text>
-              </LabeledContent>
-              <LabeledContent label="Saved Signals">
-                <Text>{String(status.savedSignals)}</Text>
-              </LabeledContent>
-            </>
+          {connected ? (
+            status ? (
+              <>
+                <LabeledContent label="State">
+                  <Text>{status.state}</Text>
+                </LabeledContent>
+                <LabeledContent label="Battery">
+                  <Text>{`${status.batteryVoltage.toFixed(2)} V`}</Text>
+                </LabeledContent>
+                <LabeledContent label="Saved Signals">
+                  <Text>{String(status.savedSignals)}</Text>
+                </LabeledContent>
+              </>
+            ) : (
+              <ProgressView />
+            )
           ) : (
-            <ProgressView />
+            <LabeledContent label="Status">
+              <Text color="secondary">{isSearching ? 'Looking for device…' : 'Not connected'}</Text>
+            </LabeledContent>
           )}
         </Section>
       </List>

@@ -6,9 +6,10 @@ const NUS_RX_UUID = '6E400002-B5A3-F393-E0A9-E50E24DCCA9E';
 const NUS_TX_UUID = '6E400003-B5A3-F393-E0A9-E50E24DCCA9E';
 
 const DEVICE_NAME = 'GarageDoor433';
-const SCAN_TIMEOUT_MS = 10000;
+const SCAN_TIMEOUT_MS = 10000;       // manual connect scan timeout
+const AUTO_SCAN_TIMEOUT_MS = 5000;   // background auto-connect scan timeout
 
-type ConnectionState = 'disconnected' | 'scanning' | 'connecting' | 'connected';
+export type ConnectionState = 'disconnected' | 'scanning' | 'connecting' | 'connected';
 type ConnectionListener = (state: ConnectionState) => void;
 type ResponseListener = (json: Record<string, unknown>) => void;
 
@@ -47,24 +48,25 @@ class BLEManager {
     return () => this.responseListeners.delete(listener);
   }
 
-  async scan(): Promise<Device> {
-    if (Platform.OS === 'ios') {
-      const btState = await this.manager.state();
-      if (btState !== 'PoweredOn') {
-        await new Promise<void>((resolve, reject) => {
-          const sub = this.manager.onStateChange((s) => {
-            if (s === 'PoweredOn') {
-              sub.remove();
-              resolve();
-            } else if (s === 'Unsupported' || s === 'Unauthorized') {
-              sub.remove();
-              reject(new Error(`Bluetooth is ${s}`));
-            }
-          }, true);
-        });
-      }
-    }
+  private async waitForBluetooth(): Promise<void> {
+    if (Platform.OS !== 'ios') return;
+    const btState = await this.manager.state();
+    if (btState === 'PoweredOn') return;
+    await new Promise<void>((resolve, reject) => {
+      const sub = this.manager.onStateChange((s) => {
+        if (s === 'PoweredOn') {
+          sub.remove();
+          resolve();
+        } else if (s === 'Unsupported' || s === 'Unauthorized') {
+          sub.remove();
+          reject(new Error(`Bluetooth is ${s}`));
+        }
+      }, true);
+    });
+  }
 
+  async scan(timeoutMs = SCAN_TIMEOUT_MS): Promise<Device> {
+    await this.waitForBluetooth();
     this.setState('scanning');
 
     return new Promise((resolve, reject) => {
@@ -72,7 +74,7 @@ class BLEManager {
         this.manager.stopDeviceScan();
         this.setState('disconnected');
         reject(new Error('Scan timed out — device not found'));
-      }, SCAN_TIMEOUT_MS);
+      }, timeoutMs);
 
       this.manager.startDeviceScan(
         [NUS_SERVICE_UUID],
@@ -101,6 +103,8 @@ class BLEManager {
 
     try {
       const connected = await target.connect({ requestMTU: 185 });
+      // discoverAllServicesAndCharacteristics will block while the iOS pairing
+      // dialog is shown — this is normal on first connection with a new device.
       await connected.discoverAllServicesAndCharacteristics();
       this.device = connected;
 
@@ -129,6 +133,21 @@ class BLEManager {
       this.cleanup();
       this.setState('disconnected');
       throw err;
+    }
+  }
+
+  /**
+   * Silently scan for the device and connect if found.
+   * Uses a shorter timeout so it doesn't block the UI on startup.
+   * Safe to call when already connected or scanning — returns immediately.
+   */
+  async autoConnect(): Promise<void> {
+    if (this._state !== 'disconnected') return;
+    try {
+      const device = await this.scan(AUTO_SCAN_TIMEOUT_MS);
+      await this.connect(device);
+    } catch {
+      // Device not available — state already reset to 'disconnected'
     }
   }
 

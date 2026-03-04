@@ -28,6 +28,10 @@ STATE_REPLAYING = 3
 
 # Display refresh interval
 DISPLAY_UPDATE_MS = 200
+# Display power management
+DISPLAY_SPLASH_MS = 4000   # How long the boot splash stays on
+DISPLAY_LINGER_MS = 5000   # How long to keep screen on after activity
+DISPLAY_PIN_MS = 60000     # How long to show the BLE pairing PIN
 
 
 class App:
@@ -76,15 +80,18 @@ class App:
         # Initialize signal recorder
         self.recorder = SignalRecorder(self.radio)
 
+        # Display sleep timer — controls when OLED powers off
+        self._disp_until = time.ticks_ms() + DISPLAY_SPLASH_MS
+        self._display_timer = time.ticks_ms()
+
         # Initialize BLE
         print("Initializing BLE...")
-        self.ble = BLEService(name="GarageDoor433", on_command=self._handle_command)
+        self.ble = BLEService(name="GarageDoor433", on_command=self._handle_command,
+                              on_pin=self._on_pin_display)
         print("BLE advertising")
 
         # Pending command from BLE (processed in main loop)
         self._pending_cmd = None
-
-        self._display_timer = time.ticks_ms()
 
     def _read_battery(self):
         """Read battery voltage via ADC."""
@@ -121,6 +128,7 @@ class App:
             if self.state == STATE_IDLE or self.state == STATE_CAPTURED:
                 self.state = STATE_RECORDING
                 self.recorder.start_recording()
+                self._keep_display()
                 self.led.value(1)
                 self.ble.send_json({"status": "ok", "action": "record"})
             else:
@@ -132,6 +140,7 @@ class App:
                 if self.recorder.has_signal():
                     self.state = STATE_CAPTURED
                     proto = self.recorder.detect_protocol()
+                    self._keep_display()
                     self.display.screen_captured(self.recorder.pulse_count, proto)
                     self.ble.send_json({
                         "status": "ok", "action": "stop",
@@ -139,6 +148,7 @@ class App:
                     })
                 else:
                     self.state = STATE_IDLE
+                    self._keep_display()
                     self.display.screen_error("No signal detected")
                     self.ble.send_json({
                         "status": "error", "action": "stop",
@@ -163,6 +173,7 @@ class App:
             name, pulses = result
             self.state = STATE_REPLAYING
             self.last_slot = slot
+            self._keep_display()
             self.ble.send_json({"status": "ok", "action": "play", "slot": slot})
             self.led.value(1)
 
@@ -208,6 +219,24 @@ class App:
         elif action == "get_slots":
             slots = self.recorder.get_all_slots()
             self.ble.send_json({"status": "ok", "action": "get_slots", "slots": slots})
+
+        elif action == "get_signal":
+            slot = req.get("slot")
+            if slot is None:
+                self.ble.send_json({"status": "error", "action": "get_signal", "message": "Missing slot"})
+                return
+            data = self.recorder.load_signal_full(slot)
+            if data is None:
+                self.ble.send_json({"status": "error", "action": "get_signal", "message": "Slot empty"})
+                return
+            self.ble.send_json({
+                "status": "ok", "action": "get_signal",
+                "slot": slot,
+                "name": data.get("name", ""),
+                "protocol": data.get("protocol", "unknown"),
+                "pulse_count": data.get("pulse_count", 0),
+                "pulses": data.get("pulses", []),
+            })
 
         elif action == "status":
             states = {STATE_IDLE: "idle", STATE_RECORDING: "recording",
@@ -352,6 +381,16 @@ class App:
             self.ble.send_line("ERR Unknown command: {}".format(verb))
             self.ble.send_line("Commands: RECORD STOP PLAY SAVE LIST DELETE STATUS")
 
+    def _keep_display(self, ms=DISPLAY_LINGER_MS):
+        """Wake the OLED and extend its on-time by ms milliseconds."""
+        self.display.wake()
+        self._disp_until = time.ticks_ms() + ms
+
+    def _on_pin_display(self, pin):
+        """BLE callback: show the pairing PIN on the OLED."""
+        self._keep_display(DISPLAY_PIN_MS)
+        self.display.screen_pin(pin)
+
     def _check_button(self):
         """Check button press (GPIO0, active low) with debounce."""
         val = self.button.value()
@@ -370,6 +409,7 @@ class App:
             if result:
                 name, pulses = result
                 self.state = STATE_REPLAYING
+                self._keep_display()
                 self.led.value(1)
 
                 def progress(current, total):
@@ -379,6 +419,7 @@ class App:
                 self.led.value(0)
                 self.state = STATE_IDLE
             else:
+                self._keep_display()
                 self.display.screen_error("Slot {} empty".format(self.last_slot))
                 time.sleep_ms(1000)
         elif self.state == STATE_RECORDING:
@@ -386,18 +427,25 @@ class App:
             self._process_command("STOP")
 
     def _update_display(self):
-        """Periodic display refresh based on current state."""
+        """Periodic display refresh and sleep management.
+
+        The OLED is kept on only while _disp_until is in the future.
+        It powers off automatically once that timer expires.
+        """
         now = time.ticks_ms()
+
+        # Power off when the active timer expires
+        if time.ticks_diff(now, self._disp_until) >= 0:
+            self.display.sleep()
+            return
+
         if time.ticks_diff(now, self._display_timer) < DISPLAY_UPDATE_MS:
             return
         self._display_timer = now
 
-        if self.state == STATE_IDLE:
-            num_signals = len(self.recorder.list_signals())
-            voltage = self._read_battery()
-            self.display.screen_idle(self.ble.connected, num_signals, voltage)
-
-        elif self.state == STATE_RECORDING:
+        if self.state == STATE_RECORDING:
+            # Keep extending display timer while actively recording
+            self._disp_until = now + DISPLAY_LINGER_MS
             pulse_count = self.recorder.get_live_pulse_count()
             elapsed = self.recorder.get_elapsed_ms()
             self.display.screen_recording(pulse_count, elapsed, pulse_count > 0)
@@ -407,6 +455,8 @@ class App:
                 self.led.value(1)
             else:
                 self.led.value(0)
+        # STATE_IDLE / STATE_CAPTURED / STATE_REPLAYING:
+        # Display shows the last drawn frame until _disp_until expires.
 
     def _check_recording_timeout(self):
         """Auto-stop recording after timeout."""

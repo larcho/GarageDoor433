@@ -3,16 +3,16 @@ import { Alert } from 'react-native';
 
 import {
   BottomSheet,
-  Group,
-  VStack,
-  Text,
   Button,
   Form,
-  Section,
+  Group,
   LabeledContent,
-  TextField,
   Picker,
   ProgressView,
+  Section,
+  Text,
+  TextField,
+  VStack,
 } from '@expo/ui/swift-ui';
 import {
   buttonStyle,
@@ -27,10 +27,10 @@ import {
 } from '@expo/ui/swift-ui/modifiers';
 
 import {
+  type RecordingResult,
   saveSignal,
   startRecording,
   stopRecording,
-  type RecordingResult,
 } from '@/services/device-service';
 
 type Step = 'idle' | 'recording' | 'captured' | 'saving';

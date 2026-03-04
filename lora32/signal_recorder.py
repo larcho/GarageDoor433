@@ -329,6 +329,15 @@ class SignalRecorder:
         except (OSError, ValueError, KeyError):
             return None
 
+    def load_signal_full(self, slot):
+        """Load complete signal data from a saved slot. Returns raw dict or None."""
+        path = "{}/slot_{}.json".format(SIGNALS_DIR, slot)
+        try:
+            with open(path, "r") as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return None
+
     def delete_signal(self, slot):
         """Delete a saved signal slot."""
         path = "{}/slot_{}.json".format(SIGNALS_DIR, slot)

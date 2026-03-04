@@ -10,7 +10,9 @@
     "web": "expo start --web",
     "run:ios": "expo run:ios",
     "run:android": "expo run:android",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@expo/ui": "55.0.1",
@@ -46,6 +48,10 @@
     "@types/react": "~19.2.10",
     "eslint": "^9.25.0",
     "eslint-config-expo": "~55.0.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-simple-import-sort": "^12.1.1",
+    "eslint-plugin-unused-imports": "^4.4.1",
+    "prettier": "^3.8.1",
     "typescript": "~5.9.2"
   },
   "private": true
