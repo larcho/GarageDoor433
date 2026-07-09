@@ -145,11 +145,7 @@ export async function stopRecording(): Promise<RecordingResult> {
   };
 }
 
-export async function saveSignal(
-  slot: number,
-  name: string,
-  _recording: RecordingResult,
-): Promise<{ success: boolean }> {
+export async function saveSignal(slot: number, name: string): Promise<{ success: boolean }> {
   await sendAndAwait({ action: 'save', slot, name }, 'save');
   return { success: true };
 }

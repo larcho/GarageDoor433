@@ -95,7 +95,7 @@ export function RecordSheet({ isPresented, onIsPresentedChange, onSaved }: Recor
     setStep('saving');
     try {
       const slotNumber = slotIndex + 1;
-      const res = await saveSignal(slotNumber, name.trim(), result);
+      const res = await saveSignal(slotNumber, name.trim());
       if (res.success) {
         onIsPresentedChange(false);
         reset();
