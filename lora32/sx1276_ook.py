@@ -56,6 +56,11 @@ FREQ_433_92_MSB = 0x6C
 FREQ_433_92_MID = 0x7A
 FREQ_433_92_LSB = 0xE1
 
+# RegOokPeak values. Bits 4:3=01 (peak threshold), bits 2:0=100 (step).
+# Bit 5 = BitSyncOn: ON for clean RX capture, OFF for asynchronous TX keying.
+OOK_PEAK_RX = 0x2C   # BitSyncOn = 1
+OOK_PEAK_TX = 0x0C   # BitSyncOn = 0
+
 
 class SX1276OOK:
     def __init__(self, sck=5, mosi=27, miso=19, cs=18, rst=23, dio0=26, dio2=32):
@@ -131,7 +136,11 @@ class SX1276OOK:
         # OCP: 120mA
         self._write_reg(REG_OCP, 0x2B)
 
-        # LNA: max gain, auto
+        # LNA: max gain (G1), boost on. Used as a FIXED gain because AGC is
+        # disabled below -- see REG_RX_CONFIG. Fixed max gain keeps the OOK
+        # envelope well above the demodulator threshold, which is what makes
+        # the raw capture clean; letting AGC drop the gain pushes the signal
+        # down near the threshold and the demod chatters (glitches/doubles).
         self._write_reg(REG_LNA, 0x23)
 
         # RX BW: ~83kHz (Mant=24, Exp=2 -> 32MHz / (24 * 16) = 83.3kHz)
@@ -141,9 +150,13 @@ class SX1276OOK:
         # AFC BW: match RX BW
         self._write_reg(REG_AFC_BW, 0x12)
 
-        # OOK peak detector config:
-        # Peak mode, step=1.0dB (faster response), decay every 2 chips
-        self._write_reg(REG_OOK_PEAK, 0x2C)
+        # OOK peak detector config. BitSyncOn (bit 5) is toggled per mode in
+        # start_rx()/start_tx() -- see OOK_PEAK_RX / OOK_PEAK_TX below:
+        #   RX needs the bit synchronizer ON to deglitch the raw demodulator
+        #   output; TX needs it OFF so the bit-banged DIO2 pin directly keys
+        #   the carrier (asynchronous continuous mode). Default to the RX value.
+        # Peak threshold mode (bits 4:3 = 01), step (bits 2:0 = 100).
+        self._write_reg(REG_OOK_PEAK, OOK_PEAK_RX)
 
         # OOK fixed threshold (for fixed threshold mode - backup)
         self._write_reg(REG_OOK_FIX, 0x50)
@@ -167,8 +180,11 @@ class SX1276OOK:
         dio2_map = (dio2_map & 0xF3) | 0x04  # DIO2 bits [3:2] = 01
         self._write_reg(REG_DIO_MAPPING1, dio2_map)
 
-        # RX config: enable AGC, trigger on RSSI
-        self._write_reg(REG_RX_CONFIG, 0x1E)
+        # RX config: AgcAutoOn = 0 (fixed manual LNA gain, see REG_LNA),
+        # AfcAutoOn = 1, RxTrigger on RSSI. Disabling AGC is critical for clean
+        # OOK capture -- with AGC on, the loop lowers gain on a strong nearby
+        # remote and the demodulator output chatters.
+        self._write_reg(REG_RX_CONFIG, 0x16)
 
         self._set_mode(MODE_STDBY)
         return True
@@ -177,12 +193,17 @@ class SX1276OOK:
         """Enter continuous RX mode. DIO2 outputs demodulated OOK data."""
         # Ensure DIO2 is input for reading demodulated signal
         self.dio2 = Pin(32, Pin.IN)
+        # Bit synchronizer ON: chip re-clocks and deglitches the demod output.
+        self._write_reg(REG_OOK_PEAK, OOK_PEAK_RX)
         self._set_mode(MODE_RX_CONTINUOUS)
 
     def start_tx(self):
         """Enter continuous TX mode. DIO2 is used to modulate the carrier."""
         # DIO2 becomes output to drive OOK modulation
         self.dio2 = Pin(32, Pin.OUT, value=0)
+        # Bit synchronizer OFF: asynchronous mode, DIO2 level directly keys the
+        # carrier so our bit-banged pulse timing is transmitted faithfully.
+        self._write_reg(REG_OOK_PEAK, OOK_PEAK_TX)
         self._set_mode(MODE_TX)
 
     def stop(self):

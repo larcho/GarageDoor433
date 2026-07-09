@@ -39,6 +39,17 @@ class App:
     def __init__(self):
         self.state = STATE_IDLE
         self.last_slot = 1  # Last played/saved slot for button replay
+        self._pending_cmd = None  # Pending BLE command (processed in main loop)
+
+        # Initialize BLE FIRST, while the heap is fresh. The NimBLE controller
+        # needs a large CONTIGUOUS block of internal RAM at init; if the display,
+        # radio and recorder allocate first they fragment that region and the
+        # controller init fails ("hci inits failed") at cold boot even though
+        # total free RAM is ample.
+        print("Initializing BLE...")
+        self.ble = BLEService(name="GarageDoor433", on_command=self._handle_command,
+                              on_pin=self._on_pin_display)
+        print("BLE advertising")
 
         # Initialize board hardware via lora32 firmware module
         print("Initializing board...")
@@ -84,15 +95,6 @@ class App:
         # Display sleep timer — controls when OLED powers off
         self._disp_until = time.ticks_ms() + DISPLAY_SPLASH_MS
         self._display_timer = time.ticks_ms()
-
-        # Initialize BLE
-        print("Initializing BLE...")
-        self.ble = BLEService(name="GarageDoor433", on_command=self._handle_command,
-                              on_pin=self._on_pin_display)
-        print("BLE advertising")
-
-        # Pending command from BLE (processed in main loop)
-        self._pending_cmd = None
 
     def _read_battery(self):
         """Read battery voltage via ADC."""
