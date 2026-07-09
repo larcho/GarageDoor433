@@ -7,6 +7,11 @@ for garage door signal recording and replay.
 from machine import Pin, SPI
 import time
 
+try:
+    from typing import Optional
+except ImportError:
+    pass  # MicroPython has no typing module; annotations are not evaluated.
+
 
 # SX1276 Register Addresses
 REG_FIFO = 0x00
@@ -63,7 +68,9 @@ OOK_PEAK_TX = 0x0C   # BitSyncOn = 0
 
 
 class SX1276OOK:
-    def __init__(self, sck=5, mosi=27, miso=19, cs=18, rst=23, dio0=26, dio2=32):
+    def __init__(self, sck: int = 5, mosi: int = 27, miso: int = 19,
+                 cs: int = 18, rst: int = 23, dio0: int = 26,
+                 dio2: int = 32) -> None:
         self.cs = Pin(cs, Pin.OUT, value=1)
         self.rst_pin = Pin(rst, Pin.OUT, value=1)
         self.dio0 = Pin(dio0, Pin.IN)
@@ -72,10 +79,10 @@ class SX1276OOK:
         self.spi = SPI(1, baudrate=5000000, polarity=0, phase=0,
                        sck=Pin(sck), mosi=Pin(mosi), miso=Pin(miso))
 
-        self._mode = None
+        self._mode = None  # type: Optional[int]
         self._buf = bytearray(2)
 
-    def _read_reg(self, addr):
+    def _read_reg(self, addr: int) -> int:
         self.cs.value(0)
         self._buf[0] = addr & 0x7F
         self._buf[1] = 0x00
@@ -83,14 +90,14 @@ class SX1276OOK:
         self.cs.value(1)
         return self._buf[1]
 
-    def _write_reg(self, addr, value):
+    def _write_reg(self, addr: int, value: int) -> None:
         self.cs.value(0)
         self._buf[0] = addr | 0x80
         self._buf[1] = value & 0xFF
         self.spi.write(self._buf)
         self.cs.value(1)
 
-    def _set_mode(self, mode):
+    def _set_mode(self, mode: int) -> None:
         reg = LONG_RANGE_OFF | MODULATION_OOK | mode
         self._write_reg(REG_OP_MODE, reg)
         self._mode = mode
@@ -100,13 +107,13 @@ class SX1276OOK:
                 return
             time.sleep_ms(1)
 
-    def reset(self):
+    def reset(self) -> None:
         self.rst_pin.value(0)
         time.sleep_ms(10)
         self.rst_pin.value(1)
         time.sleep_ms(10)
 
-    def init(self):
+    def init(self) -> bool:
         self.reset()
         time.sleep_ms(20)
 
@@ -189,7 +196,7 @@ class SX1276OOK:
         self._set_mode(MODE_STDBY)
         return True
 
-    def start_rx(self):
+    def start_rx(self) -> None:
         """Enter continuous RX mode. DIO2 outputs demodulated OOK data."""
         # Ensure DIO2 is input for reading demodulated signal
         self.dio2 = Pin(32, Pin.IN)
@@ -197,7 +204,7 @@ class SX1276OOK:
         self._write_reg(REG_OOK_PEAK, OOK_PEAK_RX)
         self._set_mode(MODE_RX_CONTINUOUS)
 
-    def start_tx(self):
+    def start_tx(self) -> None:
         """Enter continuous TX mode. DIO2 is used to modulate the carrier."""
         # DIO2 becomes output to drive OOK modulation
         self.dio2 = Pin(32, Pin.OUT, value=0)
@@ -206,32 +213,32 @@ class SX1276OOK:
         self._write_reg(REG_OOK_PEAK, OOK_PEAK_TX)
         self._set_mode(MODE_TX)
 
-    def stop(self):
+    def stop(self) -> None:
         """Return to standby mode."""
         self.dio2 = Pin(32, Pin.IN)
         self._set_mode(MODE_STDBY)
 
-    def sleep(self):
+    def sleep(self) -> None:
         """Enter sleep mode for low power."""
         self.dio2 = Pin(32, Pin.IN)
         self._set_mode(MODE_SLEEP)
 
-    def get_rssi(self):
+    def get_rssi(self) -> float:
         """Read current RSSI value in dBm."""
         return -self._read_reg(REG_RSSI_VALUE) / 2.0
 
-    def set_frequency(self, freq_mhz):
+    def set_frequency(self, freq_mhz: float) -> None:
         """Set carrier frequency in MHz."""
         frf = int((freq_mhz * (1 << 19)) / 32.0)
         self._write_reg(REG_FRF_MSB, (frf >> 16) & 0xFF)
         self._write_reg(REG_FRF_MID, (frf >> 8) & 0xFF)
         self._write_reg(REG_FRF_LSB, frf & 0xFF)
 
-    def set_tx_power(self, level):
+    def set_tx_power(self, level: int) -> None:
         """Set TX power level (2-17 dBm with PA_BOOST)."""
         level = max(2, min(17, level))
         self._write_reg(REG_PA_CONFIG, 0x80 | (level - 2))
 
-    def set_ook_threshold(self, threshold):
+    def set_ook_threshold(self, threshold: int) -> None:
         """Set OOK fixed threshold (0-255)."""
         self._write_reg(REG_OOK_FIX, threshold & 0xFF)

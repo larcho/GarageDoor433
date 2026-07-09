@@ -16,6 +16,11 @@ from signal_recorder import SignalRecorder
 from display import Display
 from ble_service import BLEService
 
+try:
+    from typing import Optional
+except ImportError:
+    pass  # MicroPython has no typing module; annotations are not evaluated.
+
 
 # Hardware pins
 BUTTON_PIN = 0
@@ -36,10 +41,10 @@ DISPLAY_PIN_MS = 60000     # How long to show the BLE pairing PIN
 
 
 class App:
-    def __init__(self):
+    def __init__(self) -> None:
         self.state = STATE_IDLE
         self.last_slot = 1  # Last played/saved slot for button replay
-        self._pending_cmd = None  # Pending BLE command (processed in main loop)
+        self._pending_cmd = None  # type: Optional[str]  # queued BLE command
 
         # Initialize BLE FIRST, while the heap is fresh. The NimBLE controller
         # needs a large CONTIGUOUS block of internal RAM at init; if the display,
@@ -96,7 +101,7 @@ class App:
         self._disp_until = time.ticks_ms() + DISPLAY_SPLASH_MS
         self._display_timer = time.ticks_ms()
 
-    def _read_battery(self):
+    def _read_battery(self) -> float:
         """Read battery voltage via ADC."""
         if self._adc is None:
             return 0.0
@@ -106,11 +111,11 @@ class App:
         # 1.0528 calibration factor — ESP32 ADC reads ~5% low (verified against multimeter)
         return (raw / 4095.0) * 3.3 * 2 * 1.0528
 
-    def _handle_command(self, cmd):
+    def _handle_command(self, cmd: str) -> None:
         """BLE command callback - queue for main loop processing."""
         self._pending_cmd = cmd.strip()
 
-    def _process_command(self, cmd):
+    def _process_command(self, cmd: str) -> None:
         """Route incoming BLE data: try JSON first, fall back to legacy text."""
         # Try JSON parse first
         try:
@@ -124,7 +129,7 @@ class App:
         # Legacy text command fallback
         self._process_legacy_command(cmd.upper())
 
-    def _process_request(self, req):
+    def _process_request(self, req: dict) -> None:
         """Process a JSON API request and send a JSON response."""
         action = req.get("action", "")
 
@@ -268,7 +273,7 @@ class App:
         else:
             self.ble.send_json({"status": "error", "action": action, "message": "Unknown action"})
 
-    def _process_legacy_command(self, cmd):
+    def _process_legacy_command(self, cmd: str) -> None:
         """Process a legacy ASCII text command (backward compat for nRF Connect)."""
         parts = cmd.split()
         verb = parts[0] if parts else ""
@@ -396,17 +401,17 @@ class App:
             self.ble.send_line("ERR Unknown command: {}".format(verb))
             self.ble.send_line("Commands: RECORD STOP PLAY SAVE LIST DELETE STATUS")
 
-    def _keep_display(self, ms=DISPLAY_LINGER_MS):
+    def _keep_display(self, ms: int = DISPLAY_LINGER_MS) -> None:
         """Wake the OLED and extend its on-time by ms milliseconds."""
         self.display.wake()
         self._disp_until = time.ticks_ms() + ms
 
-    def _on_pin_display(self, pin):
+    def _on_pin_display(self, pin: str) -> None:
         """BLE callback: show the pairing PIN on the OLED."""
         self._keep_display(DISPLAY_PIN_MS)
         self.display.screen_pin(pin)
 
-    def _check_button(self):
+    def _check_button(self) -> None:
         """Check button press (GPIO0, active low) with debounce."""
         val = self.button.value()
         now = time.ticks_ms()
@@ -417,7 +422,7 @@ class App:
                 self._on_button_press()
         self._btn_last = val
 
-    def _on_button_press(self):
+    def _on_button_press(self) -> None:
         """Handle physical button press - replay last used slot."""
         if self.state == STATE_IDLE:
             result = self.recorder.load_signal(self.last_slot)
@@ -441,7 +446,7 @@ class App:
             # Button during recording = stop recording
             self._process_command("STOP")
 
-    def _update_display(self):
+    def _update_display(self) -> None:
         """Periodic display refresh and sleep management.
 
         The OLED is kept on only while _disp_until is in the future.
@@ -481,7 +486,7 @@ class App:
         # STATE_IDLE / STATE_CAPTURED / STATE_REPLAYING:
         # Display shows the last drawn frame until _disp_until expires.
 
-    def _finish_multi_recording(self):
+    def _finish_multi_recording(self) -> None:
         """Finalise multi-press session and send result over BLE."""
         self.recorder.finish_multi_recording()
         self.led.value(0)
@@ -503,7 +508,7 @@ class App:
                 "message": "No signal detected",
             })
 
-    def _check_multi_press(self):
+    def _check_multi_press(self) -> None:
         """Detect completed presses during multi-press recording."""
         if self.state != STATE_RECORDING_MULTI:
             return
@@ -518,7 +523,7 @@ class App:
             if captured >= target:
                 self._finish_multi_recording()
 
-    def _check_recording_timeout(self):
+    def _check_recording_timeout(self) -> None:
         """Auto-stop recording after timeout."""
         if self.state == STATE_RECORDING and self.recorder.is_capture_timeout():
             self._process_command("STOP")
@@ -535,7 +540,7 @@ class App:
                 self.state = STATE_IDLE
                 self.led.value(0)
 
-    def run(self):
+    def run(self) -> None:
         """Main event loop."""
         print("GarageDoor433 Ready")
 

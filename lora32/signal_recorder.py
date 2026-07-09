@@ -23,6 +23,16 @@ import time
 import json
 import os
 
+try:
+    from typing import Optional, Callable, TYPE_CHECKING
+except ImportError:
+    TYPE_CHECKING = False  # MicroPython: no typing module, annotations unused.
+
+if TYPE_CHECKING:
+    from sx1276_ook import SX1276OOK
+    Pulse = tuple[int, int]   # (high_us, low_us)
+    Frame = list[Pulse]       # one decoded code frame
+
 
 # Signal processing constants
 MIN_PULSE_US = 100        # Merge edges closer than this (noise glitch)
@@ -39,7 +49,7 @@ MULTI_PRESS_TIMEOUT_MS = 30000  # 30s total timeout for multi-press session
 
 
 class SignalRecorder:
-    def __init__(self, radio, dio2_pin=32):
+    def __init__(self, radio: "SX1276OOK", dio2_pin: int = 32) -> None:
         micropython.alloc_emergency_exception_buf(200)
         self.radio = radio
         self.dio2_pin_num = dio2_pin
@@ -51,11 +61,11 @@ class SignalRecorder:
         # Edge buffers written from the ISR. Allocated lazily on first record so
         # boot-time BLE init is not starved of the large contiguous RAM block it
         # needs (allocating ~20KB here breaks NimBLE's controller init).
-        self._ts = None   # timestamps (ticks_us)
-        self._lv = None   # pin level after edge
+        self._ts = None   # type: Optional[array.array]  # timestamps (ticks_us)
+        self._lv = None   # type: Optional[array.array]  # pin level after edge
         self._idx = 0
 
-        self.pulses = []       # Canonical frame: [(high_us, low_us), ...]
+        self.pulses = []       # type: Frame  # Canonical [(high_us, low_us), ...]
         self.pulse_count = 0
         self.capture_start = 0
 
@@ -69,7 +79,7 @@ class SignalRecorder:
     # Edge capture
     # ------------------------------------------------------------------
 
-    def _irq_handler(self, pin):
+    def _irq_handler(self, pin: Pin) -> None:
         """ISR: store (timestamp, level) at each edge. No allocation here."""
         i = self._idx
         if i < MAX_EDGES:
@@ -77,18 +87,18 @@ class SignalRecorder:
             self._lv[i] = pin.value()
             self._idx = i + 1
 
-    def _ensure_buffers(self):
+    def _ensure_buffers(self) -> None:
         """Allocate the edge buffers on first use (kept for reuse afterwards)."""
         if self._ts is None:
             self._ts = array.array('i', [0] * MAX_EDGES)
             self._lv = array.array('b', [0] * MAX_EDGES)
 
-    def _attach_irq(self):
+    def _attach_irq(self) -> None:
         self.dio2 = Pin(self.dio2_pin_num, Pin.IN)
         self.dio2.irq(trigger=Pin.IRQ_RISING | Pin.IRQ_FALLING,
                       handler=self._irq_handler)
 
-    def start_recording(self):
+    def start_recording(self) -> None:
         """Begin capturing OOK signal from DIO2."""
         self._ensure_buffers()
         self.recording = True
@@ -102,7 +112,7 @@ class SignalRecorder:
         self._idx = 0       # Drain settle-period noise
         self._attach_irq()
 
-    def stop_recording(self):
+    def stop_recording(self) -> None:
         """Stop capturing and process the recorded edges into a frame."""
         self.dio2.irq(handler=None)
         self.recording = False
@@ -114,7 +124,7 @@ class SignalRecorder:
     # Edge -> pulses -> frames -> consensus
     # ------------------------------------------------------------------
 
-    def _merge_intervals(self, start, end):
+    def _merge_intervals(self, start: int, end: int) -> "list[list[int]]":
         """Turn edges [start:end] into merged (duration, level) intervals.
 
         level is the pin level HELD during the interval preceding each edge.
@@ -132,7 +142,7 @@ class SignalRecorder:
             merged.append([d, l])
         return merged
 
-    def _frames_from(self, start, end):
+    def _frames_from(self, start: int, end: int) -> "list[Frame]":
         """Build a list of frames (each a list of (high,low) pairs)."""
         merged = self._merge_intervals(start, end)
         frames = []
@@ -160,7 +170,7 @@ class SignalRecorder:
                 i += 1
         return frames
 
-    def _consensus(self, frames):
+    def _consensus(self, frames: "list[Frame]") -> "Frame":
         """Majority-vote a set of repeated frames into one clean frame."""
         if not frames:
             return []
@@ -174,7 +184,7 @@ class SignalRecorder:
         hi_t = (highs[len(highs) // 4] + highs[3 * len(highs) // 4]) / 2
 
         # Group frames by their quantized bit signature.
-        groups = {}
+        groups = {}  # type: dict[str, list[Frame]]
         for f in frames:
             sig = "".join("1" if h > hi_t else "0" for (h, _) in f[:-1])
             groups.setdefault(sig, []).append(f)
@@ -195,27 +205,27 @@ class SignalRecorder:
     # Status helpers
     # ------------------------------------------------------------------
 
-    def is_capture_timeout(self):
+    def is_capture_timeout(self) -> bool:
         if not self.recording:
             return False
         return time.ticks_diff(time.ticks_ms(), self.capture_start) >= CAPTURE_TIMEOUT_MS
 
-    def get_elapsed_ms(self):
+    def get_elapsed_ms(self) -> int:
         if not self.recording:
             return 0
         return time.ticks_diff(time.ticks_ms(), self.capture_start)
 
-    def get_live_pulse_count(self):
+    def get_live_pulse_count(self) -> int:
         return self._idx // 2
 
-    def has_signal(self):
+    def has_signal(self) -> bool:
         return len(self.pulses) >= 4
 
-    def extract_single_frame(self):
+    def extract_single_frame(self) -> "Frame":
         """The stored pulses are already one canonical frame."""
         return self.pulses
 
-    def detect_protocol(self):
+    def detect_protocol(self) -> str:
         """Try to identify the signal protocol."""
         if not self.pulses or len(self.pulses) < 4:
             return "unknown"
@@ -247,17 +257,17 @@ class SignalRecorder:
     # Multi-press averaging
     # ------------------------------------------------------------------
 
-    def start_recording_multi(self, count):
+    def start_recording_multi(self, count: int) -> None:
         """Initialize a multi-press session and begin recording."""
         self._multi_target = count
-        self._multi_frames = []
+        self._multi_frames = []  # type: list[Frame]
         self._multi_last_edge_count = 0
         self._multi_press_start_idx = 0
         self._multi_in_silence = False
         self.start_recording()
         self._multi_last_edge_time = time.ticks_ms()
 
-    def check_press_complete(self):
+    def check_press_complete(self) -> bool:
         """Poll from the main loop during multi-press recording.
 
         Returns True when a new press has been fully captured and added.
@@ -295,13 +305,13 @@ class SignalRecorder:
             return True
         return False
 
-    def get_multi_captured(self):
+    def get_multi_captured(self) -> int:
         return len(self._multi_frames)
 
-    def get_multi_target(self):
+    def get_multi_target(self) -> int:
         return self._multi_target
 
-    def finish_multi_recording(self):
+    def finish_multi_recording(self) -> None:
         """Stop recording and vote across the per-press frames."""
         self.dio2.irq(handler=None)
         self.recording = False
@@ -315,7 +325,7 @@ class SignalRecorder:
     # ------------------------------------------------------------------
 
     @micropython.native
-    def _replay_frame(self, dio2, pulses):
+    def _replay_frame(self, dio2: Pin, pulses: "Frame") -> None:
         """Replay one frame of pulses. Native code for timing accuracy."""
         for i in range(len(pulses)):
             high_us = pulses[i][0]
@@ -326,7 +336,9 @@ class SignalRecorder:
             if low_us > 0:
                 time.sleep_us(low_us)
 
-    def replay(self, pulses=None, repeats=REPLAY_REPEATS, progress_cb=None):
+    def replay(self, pulses: "Optional[Frame]" = None,
+               repeats: int = REPLAY_REPEATS,
+               progress_cb: "Optional[Callable[[int, int], None]]" = None) -> bool:
         """Replay a signal by toggling DIO2 in TX continuous (async OOK) mode."""
         if pulses is None:
             pulses = self.extract_single_frame()
@@ -357,7 +369,7 @@ class SignalRecorder:
     # Storage
     # ------------------------------------------------------------------
 
-    def save_signal(self, slot, name="signal"):
+    def save_signal(self, slot: int, name: str = "signal") -> bool:
         if slot < 1 or slot > MAX_SLOTS:
             return False
         if not self.pulses:
@@ -375,7 +387,7 @@ class SignalRecorder:
             json.dump(data, f)
         return True
 
-    def load_signal(self, slot):
+    def load_signal(self, slot: int) -> "Optional[tuple[str, Frame]]":
         """Load pulses from a saved slot. Returns (name, pulses) or None."""
         path = "{}/slot_{}.json".format(SIGNALS_DIR, slot)
         try:
@@ -386,7 +398,7 @@ class SignalRecorder:
         except (OSError, ValueError, KeyError):
             return None
 
-    def load_signal_full(self, slot):
+    def load_signal_full(self, slot: int) -> "Optional[dict]":
         path = "{}/slot_{}.json".format(SIGNALS_DIR, slot)
         try:
             with open(path, "r") as f:
@@ -394,7 +406,7 @@ class SignalRecorder:
         except (OSError, ValueError):
             return None
 
-    def delete_signal(self, slot):
+    def delete_signal(self, slot: int) -> bool:
         path = "{}/slot_{}.json".format(SIGNALS_DIR, slot)
         try:
             os.remove(path)
@@ -402,7 +414,7 @@ class SignalRecorder:
         except OSError:
             return False
 
-    def list_signals(self):
+    def list_signals(self) -> "list[tuple[int, str, int, str]]":
         signals = []
         for slot in range(1, MAX_SLOTS + 1):
             path = "{}/slot_{}.json".format(SIGNALS_DIR, slot)
@@ -416,7 +428,7 @@ class SignalRecorder:
                 pass
         return signals
 
-    def get_all_slots(self):
+    def get_all_slots(self) -> "list[dict]":
         slots = []
         for slot, name, pulse_count, protocol in self.list_signals():
             slots.append({
