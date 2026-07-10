@@ -1,6 +1,5 @@
-import { Stack } from 'expo-router';
+import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 
 import { BleProvider } from '@/contexts/ble-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
