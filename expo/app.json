@@ -60,7 +60,8 @@
             }
           ]
         }
-      ]
+      ],
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true,

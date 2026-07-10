@@ -46,13 +46,18 @@ export default function SettingsScreen() {
   const connected = connectionState === 'connected';
   const isSearching = connectionState === 'scanning' || connectionState === 'connecting';
 
-  // Fetch (or clear) device status whenever connection state changes
+  // Fetch device status when connected. The render gates the status section on
+  // `connected`, so no need to clear it on disconnect. Guard against a resolved
+  // fetch landing after the connection has already changed.
   useEffect(() => {
-    if (connected) {
-      getStatus().then(setStatus);
-    } else {
-      setStatus(null);
-    }
+    if (!connected) return;
+    let active = true;
+    getStatus().then((s) => {
+      if (active) setStatus(s);
+    });
+    return () => {
+      active = false;
+    };
   }, [connected]);
 
   // Re-fetch status when the user navigates back to this tab
